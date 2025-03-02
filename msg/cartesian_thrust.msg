@@ -1,0 +1,4 @@
+float64 thrustRoll
+float64 thrustPitch
+float64 thrustYaw
+float64 Throttle
