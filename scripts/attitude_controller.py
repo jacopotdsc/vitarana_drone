@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 from vitarana_drone.msg import *
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32
@@ -13,7 +12,7 @@ class AttitudeController():
     def __init__(self):
         rospy.init_node('attitude_controller') 
 
-        ###### ----------- PD parameters: rpy----------- ######
+        ###### ----------- PD parameters: rpy ----------- ######
         self.Kp = [60   , 60   , 2100]
         self.Ki = [0    , 0    , 0]
         self.Kd = [450, 450, 435]
@@ -21,14 +20,14 @@ class AttitudeController():
         self.attitude_error = [0.0, 0.0, 0.0]
         self.omega_error = [0.0, 0.0, 0.0]
         self.constant_error = [0.0, 0.0, 0.0]
-        self.prev_error_value = [0.0, 0.0, 0.0]
+        self.prev_attitude_error = [0.0, 0.0, 0.0]
 
-        ###### ----------- Drone attitude---------- ######
+        ###### ----------- Drone attitude ---------- ######
         self.current_attitude = [0.0, 0.0, 0.0] # Taken from IMU
         self.desired_attitude = [0.0, 0.0, 0.0] 
         self.throttle_command = 0.0
 
-        ###### ----------- Message declaration---------- ######
+        ###### ----------- Message declaration ---------- ######
         self.pwm_cmd = prop_speed()
         self.roll_Error = Float32()
         self.pitch_Error = Float32()
@@ -76,15 +75,15 @@ class AttitudeController():
         self.throttle_command = msg.rcThrottle   * 1.024  - 1024.0
     
     def pid(self):
-        ###### ----------- Computing error: rpy---------- ######
+        ###### ----------- Computing error: rpy ---------- ######
         for i in range(3):
             self.attitude_error[i] = self.desired_attitude[i] - self.current_attitude[i]
             self.constant_error[i] = self.constant_error[i] + self.attitude_error[i]
-            self.omega_error[i] = self.attitude_error[i] - self.prev_error_value[i]
-            self.prev_error_value[i] = self.attitude_error[i]
+            self.omega_error[i] = self.attitude_error[i] - self.prev_attitude_error[i]
+            self.prev_attitude_error[i] = self.attitude_error[i]
 
 
-        ###### ----------- PID equation: rpy---------- ######
+        ###### ----------- PID equation: rpy ---------- ######
         thrust_roll_controll    = self.Kp[0]*self.attitude_error[0] + self.Ki[0]*self.constant_error[0] + self.Kd[0]*self.omega_error[0]
         thrust_pitch_controll   = self.Kp[1]*self.attitude_error[1] + self.Ki[1]*self.constant_error[1] + self.Kd[1]*self.omega_error[1]
         thrust_yaw_controll     = self.Kp[2]*self.attitude_error[2] + self.Ki[2]*self.constant_error[2] + self.Kd[2]*self.omega_error[2]
@@ -97,7 +96,7 @@ class AttitudeController():
         cartesian_thrust_msg.Throttle       = self.throttle_command
         self.cartesian_thrust_pub.publish(cartesian_thrust_msg)
 
-        ###### ----------- Errorr messages: plotting purpos --------- ######
+        ###### ----------- Errorr messages: plotting purposes --------- ######
         self.roll_Error.data    = self.attitude_error[0]
         self.pitch_Error.data   = self.attitude_error[1]
         self.yaw_Error.data     = self.attitude_error[2]
