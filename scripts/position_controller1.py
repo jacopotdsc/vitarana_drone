@@ -52,22 +52,20 @@ class Edrone():
         self.altitude_Low = Float32()
         self.altitude_Low.data = -0.2
 
-        ###### ----------- PD parameters: rpy----------- ######
+        ###### ----------- PD parameters ----------- ######
         self.Kp = [1080000, 1140000, 48]
         self.Ki = [0, 0, 0]
         self.Kd = [57600000, 57900000, 3000]
        
-        # Declaring variable to store different error values, to be used in PID equations.
         self.change_in_error_value = [0.0, 0.0, 0.0]
         self.error_value = [0.0, 0.0, 0.0]
         self.prev_error_value = [0.0, 0.0, 0.0]
         self.sum_error_value = [0.0, 0.0, 0.0]
 
-        # Declaring maximum and minimum values for roll, pitch, yaw, throttle output.
         self.max_values = [2000.0, 2000.0, 2000.0, 2000.0]
         self.min_values = [1000.0, 1000.0, 1000.0, 1000.0]
 
-        # initializing Publisher for /drone_command, /latitude_error, /longitude_error, /altitude_error and tolerences
+        ###### ----------- ROS topics ----------- ######
         self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
         self.latitude_error = rospy.Publisher('/latitude_error', Float32, queue_size=1)
         self.longitude_error = rospy.Publisher('/longitude_error', Float32, queue_size=1)
@@ -80,83 +78,68 @@ class Edrone():
         self.longitude_low = rospy.Publisher('/longitude_low', Float32, queue_size=1)
         self.altitude_low = rospy.Publisher('/altitude_low', Float32, queue_size=1)
 
-        # Subscribing to /edrone/gps
         rospy.Subscriber('/edrone/gps', NavSatFix, self.gps_callback)
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
     
 
-    # Imu callback function. The function gets executed each time when imu publishes /edrone/imu/data
+
     def imu_callback(self, msg):
+        '''
+        IMU data are given in quaternion format. 
+        Applying a conversion to obtain euler angles 
+        '''
         self.drone_orientation_quaternion[0] = msg.orientation.x
         self.drone_orientation_quaternion[1] = msg.orientation.y
         self.drone_orientation_quaternion[2] = msg.orientation.z
         self.drone_orientation_quaternion[3] = msg.orientation.w
         
-        # converting the current orientations from quaternion to euler angles 
         (self.drone_orientation_euler[1], self.drone_orientation_euler[0], self.drone_orientation_euler[2]) = tf.transformations.euler_from_quaternion([self.drone_orientation_quaternion[0], self.drone_orientation_quaternion[1], self.drone_orientation_quaternion[2], self.drone_orientation_quaternion[3]])
 
 
-    # callback function for gps. This function gets executed each time when NavSatFix publishes /edrone/gps
     def gps_callback(self, msg):
         self.drone_location[0] = msg.latitude
         self.drone_location[1] = msg.longitude
         self.drone_location[2] = msg.altitude
 
-    # this function is containing all the pid equation to control the position of the drone
+
     def pid(self):
+        ###### ----------- Computing error ---------- ######
         for i in range(3):
             self.error_value[i] = self.setpoint_location[i] - self.drone_location[i]
             self.sum_error_value[i] = self.sum_error_value[i] + self.error_value[i]
             self.change_in_error_value[i] = self.error_value[i] - self.prev_error_value[i]
             self.prev_error_value[i] = self.error_value[i]
-
-        # assigning error value to its container to publish
         self.latitude_Error.data = self.error_value[0]
         self.longitude_Error.data = self.error_value[1]
         self.altitude_Error.data = self.error_value[2]
 
-        # PID eqation for latitude
+        ###### ----------- PID equation ---------- ######
         output0 = self.Kp[0]*self.error_value[0] + self.Ki[0]*self.sum_error_value[0] + self.Kd[0]*self.change_in_error_value[0]
-        
-        # PID eqation for longitude
         output1 = self.Kp[1]*self.error_value[1] + self.Ki[1]*self.sum_error_value[1] + self.Kd[1]*self.change_in_error_value[1]
-        
-        # PID equation for altitude
         output2 = self.Kp[2]*self.error_value[2] + self.Ki[2]*self.sum_error_value[2] + self.Kd[2]*self.change_in_error_value[2]
         
-        # updating the roll value according to PID output. 
-        # {this equation will work fine when there is some yaw. to see detail opne --> https://drive.google.com/file/d/14gjse4HUIi9OoznefjOehh1HU6LUhoO7/view?usp=sharing }
         self.rpyt_cmd.rcRoll = 1500 + output0*np.cos(self.drone_orientation_euler[2]) - output1*np.sin(self.drone_orientation_euler[2])
-
-        # updating the pitch value according to PID output
         self.rpyt_cmd.rcPitch = 1500 + output0*np.sin(self.drone_orientation_euler[2]) + output1*np.cos(self.drone_orientation_euler[2])
-
-        # updating the throttle value according to PID output
         self.rpyt_cmd.rcThrottle = 1500 + output2
         
-        # checking the boundary conditions for roll value
         if(self.rpyt_cmd.rcRoll > 1800):
             self.rpyt_cmd.rcRoll = 1800
         elif(self.rpyt_cmd.rcRoll<1200):
             self.rpyt_cmd.rcRoll = 1200
 
-        # checking the boundary conditions for pitch value
         if(self.rpyt_cmd.rcPitch > 1800):
             self.rpyt_cmd.rcPitch = 1800
         elif(self.rpyt_cmd.rcPitch<1200):
             self.rpyt_cmd.rcPitch = 1200
 
-        # checking the boundary conditions for throttle value
         if(self.rpyt_cmd.rcThrottle > 2000):
             self.rpyt_cmd.rcThrottle = 2000
         elif(self.rpyt_cmd.rcThrottle<1000):
             self.rpyt_cmd.rcThrottle = 1000
 
-        
-        # publishing rpyt_cmd to /drone_command
+        ###### ----------- Publishing messages --------- ######
         self.rpyt_pub.publish(self.rpyt_cmd)
 
-        # publishing different error values and tolerences
         self.latitude_error.publish(self.latitude_Error)
         self.longitude_error.publish(self.longitude_Error)
         self.altitude_error.publish(self.altitude_Error)
