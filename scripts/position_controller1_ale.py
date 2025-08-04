@@ -113,30 +113,6 @@ class Edrone():
         self.drone_location[2] = msg.altitude
 
 
-    # Callback function for /pid_tuning_roll, we used it to tune latitude
-    # This function gets executed each time when /tune_pid publishes /pid_tuning_roll
-    def roll_set_pid(self, roll):
-        self.Kp[0] = roll.Kp * 600
-        self.Ki[0] = roll.Ki * 0.008
-        self.Kd[0] = roll.Kd * 30000
-
-
-    # Callback function for /pid_tuning_pitch, we used it to tune longitude
-    # This function gets executed each time when /tune_pid publishes /pid_tuning_pitch
-    def pitch_set_pid(self, pitch):
-        self.Kp[1] = pitch.Kp * 600 
-        self.Ki[1] = pitch.Ki * 0.008
-        self.Kd[1] = pitch.Kd * 30000
-
-
-    # Callback function for /pid_tuning_yaw, we used it to tune altitude
-    # This function gets executed each time when /tune_pid publishes /pid_tuning_yaw
-    def yaw_set_pid(self, yaw):
-        self.Kp[2] = yaw.Kp * 0.06 
-        self.Ki[2] = yaw.Ki * 0.008
-        self.Kd[2] = yaw.Kd * 30
-    
-
     # this function is containing all the pid equation to control the position of the drone
     def pid(self):
         # updating all the error values to be used in PID equation
