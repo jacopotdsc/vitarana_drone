@@ -4,13 +4,16 @@ from vitarana_drone.msg import *
 from sensor_msgs.msg import NavSatFix
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32
+from gazebo_msgs.msg import ModelStates
 import rospy
 import numpy as np
 import time
 import tf
+import csv
 
 def clamp(value, min_value, max_value):
     return max(min(value, max_value), min_value)
+
 
 class Edrone():
     def __init__(self):
@@ -19,7 +22,7 @@ class Edrone():
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
-        self.setpoint_location = [19.0, 72.0, 3.0]
+        self.setpoint_location = [0.0, 0.0, 0.0]  #  desired position: va convertito in x,y,z ( anche nel main )
 
         ###### ----------- Drone message command ----------- ######
         self.rpyt_cmd = edrone_cmd()
@@ -29,9 +32,9 @@ class Edrone():
         self.rpyt_cmd.rcThrottle = 1500.0
 
         ###### ----------- PD parameters ----------- ######
-        self.Kp = [1080000, 1140000, 48]
+        self.Kp = [1, 1, 1]
         self.Ki = [0, 0, 0]
-        self.Kd = [57600000, 57900000, 3000]
+        self.Kd = [2, 2, 2]
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -44,7 +47,7 @@ class Edrone():
         self.y_error = rospy.Publisher('/y_error', Float32, queue_size=1)
         self.z_error = rospy.Publisher('/z_error', Float32, queue_size=1)
 
-        rospy.Subscriber('/edrone/gps', NavSatFix, self.gps_callback)
+        rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
 
     def imu_callback(self, msg):
@@ -64,10 +67,16 @@ class Edrone():
         self.current_attitude[1] = euler_angles[1]
         self.current_attitude[2] = euler_angles[2]
 
-    def gps_callback(self, msg):
-        self.drone_location[0] = msg.latitude
-        self.drone_location[1] = msg.longitude
-        self.drone_location[2] = msg.altitude
+    def model_states_callback(self, msg):
+        try:
+            idx = msg.name.index("edrone")
+            pos = msg.pose[idx].position
+
+            self.drone_location[0] = pos.x
+            self.drone_location[1] = pos.y
+            self.drone_location[2] = pos.z
+        except valueError:
+            rospy.logwarn("Drone Model not found")
 
 
     def pid(self):
@@ -95,33 +104,60 @@ class Edrone():
         ###### ----------- Publishing messages --------- ######
         self.rpyt_pub.publish(self.rpyt_cmd)
 
+def location_not_reached(actual, desired):
+    error_on_x = desired[0] - actual[0] 
+    error_on_y = desired[1] - actual[1] 
+    error_on_z = desired[2] - actual[2]
+    th_error = 0.0001 
+
+    x_bool = error_on_x > th_error 
+    y_bool = error_on_y > th_error
+    z_bool = error_on_z > th_error
+
+    writer = csv.writer(f)
+    writer.writerow([str(actual[0]), str(desired[0]), str(actual[1]), str(desired[1]),str(actual[2]), str(desired[2])])
+
+    #print(f"{error_on_x}: {x_bool}, {error_on_y}: {y_bool}, {error_on_z}: {z_bool}")
+
+    if ( (x_bool) or ( y_bool ) or ( z_bool ) ):
+        return True
+    else:
+        return False
+
 
 def main():
+    
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
     # setting setpoint to first point
-    e_drone.setpoint_location = [19.0, 72.0, 3]
+    e_drone.setpoint_location = [0.0, 0.0, 1.0]
     # loop until tolerences 
-    while ((e_drone.drone_location[0] > 19.0+0.000004517 or e_drone.drone_location[0] < 19.0-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
+    
+    rospy.loginfo("test")
+
+    while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
         e_drone.pid()
         time.sleep(0.05)
     # pause of 10 sec to stablize the drone at that position
     t = time.time()
+    rospy.loginfo("UTILS - TASK:" + str(1) + " SETPOINT: " + str(e_drone.setpoint_location) + " POS X: " + str(e_drone.drone_location[0]) + ", Y: " + str(e_drone.drone_location[1]) + ", Z: " + str(e_drone.drone_location[2]))
     while time.time() -t < 10:
         e_drone.pid()
         time.sleep(0.05)
 
+    rospy.loginfo("test2")
     rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
 
     # setting setpoint to the second point
-    e_drone.setpoint_location = [19.0000451704, 72.0, 3]
+    e_drone.setpoint_location = [5.0, 0.0, 1.0]
     #loop until tolerences 
-    while ((e_drone.drone_location[0] > 19.00004517040+0.000004517 or e_drone.drone_location[0] < 19.00004517040-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
+    while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
         e_drone.pid()
         time.sleep(0.05)
     # pause of 10 sec to stablize the drone at that position
     t = time.time()
+    rospy.loginfo("UTILS - TASK:" + str(2) + " SETPOINT: " + str(e_drone.setpoint_location) + " POS X: " + str(e_drone.drone_location[0]) + ", Y: " + str(e_drone.drone_location[1]) + ", Z: " + str(e_drone.drone_location[2]))
     while time.time() -t < 10:
         e_drone.pid()
         time.sleep(0.05)
@@ -129,13 +165,14 @@ def main():
     rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
 
     # setting setpoint to final point
-    e_drone.setpoint_location = [19.0000451704, 72.0, 0.31]
+    e_drone.setpoint_location = [5.0, 0.0, 0.0]
     # loop until tolerences 
-    while ((e_drone.drone_location[0] > 19.00004517040+0.000004517 or e_drone.drone_location[0] < 19.00004517040-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 0.31+0.2 or e_drone.drone_location[2] < 0.31-0.2)):
+    while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
         e_drone.pid()
         time.sleep(0.05)
     # pause of 10 sec to stablize the drone at that position
     t = time.time()
+    rospy.loginfo("UTILS - TASK:" + str(3) + " SETPOINT: " + str(e_drone.setpoint_location) + " POS X: " + str(e_drone.drone_location[0]) + ", Y: " + str(e_drone.drone_location[1]) + ", Z: " + str(e_drone.drone_location[2]))
     while time.time() -t < 10:
         e_drone.pid()
         time.sleep(0.05)
@@ -152,6 +189,7 @@ def main():
 
 if __name__ == '__main__':
 
+
     t = time.time()
     while time.time() -t < 4:
         pass
@@ -163,5 +201,6 @@ if __name__ == '__main__':
         pass
 
     while not rospy.is_shutdown():
-        main()
+        with open("/home/alessandro/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "a", newline="") as f:
+            main()
         break
