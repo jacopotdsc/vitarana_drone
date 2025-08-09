@@ -71,7 +71,7 @@ class image_proc():
             return
         
         cv2.imshow("Camera View", frame)
-        cv2.waitKey(1)
+        #cv2.waitKey(1)
             
 
 if __name__ == '__main__':
