@@ -34,9 +34,9 @@ class Edrone():
         ###### ----------- PD parameters ----------- ######
         if use_cartesian == True:
             self.setpoint_location = [0.0, 0.0, 3.0]
-            self.Kp = [9.72, 10.27, 48]
+            self.Kp = [10, 0, 100]
             self.Ki = [0, 0, 0]
-            self.Kd = [518.92, 521.62, 3000]
+            self.Kd = [400, 0, 2000]
         else:
             self.setpoint_location = [19.0, 72.0, 3.0]
             self.Kp = [1080000, 1140000, 48]
@@ -105,20 +105,9 @@ class Edrone():
         cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
         cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2]
         
-        if use_cartesian == True:
-            yaw = self.current_attitude[2]
-
-            roll_cmd =  cartesian_y_control * np.cos(yaw) - cartesian_x_control * np.sin(yaw)
-            pitch_cmd = cartesian_x_control * np.cos(yaw) + cartesian_y_control * np.sin(yaw)
-            
-            self.rpyt_cmd.rcRoll = 1500 + roll_cmd
-            self.rpyt_cmd.rcPitch = 1500 + pitch_cmd
-            self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
-
-        else:
-            self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) - cartesian_y_control*np.sin(self.current_attitude[2])
-            self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) + cartesian_y_control*np.cos(self.current_attitude[2])
-            self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
+        self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) - cartesian_y_control*np.sin(self.current_attitude[2])
+        self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) + cartesian_y_control*np.cos(self.current_attitude[2])
+        self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
 
         ##### ------------ Clamping -------------- ######
         self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1200, 1800)
@@ -126,7 +115,7 @@ class Edrone():
         self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000)
 
         writer = csv.writer(f)
-        writer.writerow([str(self.rpyt_cmd.rcRoll), str(self.rpyt_cmd.rcPitch), str(self.rpyt_cmd.rcThrottle)])
+        writer.writerow([str(self.rpyt_cmd.rcRoll), str(self.rpyt_cmd.rcPitch), str(self.rpyt_cmd.rcThrottle), str(cartesian_x_control), str(cartesian_y_control), str(cartesian_z_control)])
 
         ###### ----------- Publishing messages --------- ######
         self.rpyt_pub.publish(self.rpyt_cmd)
@@ -140,13 +129,14 @@ def location_not_reached(actual, desired):
     y_bool = error_on_y > th_error
     z_bool = error_on_z > th_error
 
-    writer = csv.writer(f)
-
     #print(f"{error_on_x}: {x_bool}, {error_on_y}: {y_bool}, {error_on_z}: {z_bool}")
     if ( (x_bool) or ( y_bool ) or ( z_bool ) ):
-        return True
+        retval = True
     else:
-        return False
+        retval = False
+
+    print(f"retval: {retval} -> {x_bool}, {y_bool}, {z_bool}")
+    return retval
 
 def main():
     e_drone.pid()
@@ -163,15 +153,14 @@ def main():
             e_drone.pid()
             time.sleep(0.05)
 
+    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
+
     # pause of 10 sec to stablize the drone at that position
     t = time.time()
     while time.time() -t < 10:
         e_drone.pid()
         time.sleep(0.05)
 
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
-
-    
     if use_cartesian == True:
         e_drone.setpoint_location = [5.0, 0.0, 3.0]
         while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
@@ -182,13 +171,14 @@ def main():
         while ((e_drone.drone_location[0] > 19.00004517040+0.000004517 or e_drone.drone_location[0] < 19.00004517040-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
             e_drone.pid()
             time.sleep(0.05)
+
+    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
     
+    # pause of 10 sec to stablize the drone at that position
     t = time.time()
     while time.time() -t < 10:
         e_drone.pid()
         time.sleep(0.05)
-
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
 
     if use_cartesian == True:
         e_drone.setpoint_location = [5.0, 0.0, 1.0]
@@ -201,6 +191,9 @@ def main():
             e_drone.pid()
             time.sleep(0.05)
     
+    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
+
+    # pause of 10 sec to stablize the drone at that position
     t = time.time()
     while time.time() -t < 10:
         e_drone.pid()
