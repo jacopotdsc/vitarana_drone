@@ -22,6 +22,8 @@
 
 	<node pkg="vitarana_drone" type="motor_api.py" name="motor_api" output="screen"/>
 
+    <node pkg="vitarana_drone" type="plotter.py" name="plotter" output="screen"/>
+
 	<param name="robot_description"
            command="$(find xacro)/xacro '$(find vitarana_drone)/models/car/urdf/my_robot.xacro'" />
 
@@ -31,5 +33,11 @@
                 -urdf
                 -model my_robot
                 -x 3 -y 0 -z 0.1" />
+
+    <node pkg="vitarana_drone" type="car_trajectory.py" name="car_trajectory" output="screen">
+        <param name="trajectory" value="circle" />
+        <param name="linear_velocity" value="0.5" />
+        <param name="angular_velocity" value="0.6" />
+    </node>
 
 </launch>
