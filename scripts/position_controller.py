@@ -23,6 +23,11 @@ class Edrone():
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
+        if use_cartesian == True:
+            self.desired_location = [[0.0, 0.0, 3.0 ], [5.0, 0.0, 3.0], [5.0, 0.0, 0.0]]
+            #self.desired_location = [[0.0, 0.0, 3.0 ], [0.0, 5.0, 3.0], [0.0, 5.0, 0.0]]
+        else:
+            self.desired_location = [[19.0, 72.0, 3.0], [19.0000451704, 72.0, 3.0] ,[19.0000451704, 72.0, 0.31]]
 
         ###### ----------- Drone message command ----------- ######
         self.rpyt_cmd = edrone_cmd()
@@ -34,9 +39,9 @@ class Edrone():
         ###### ----------- PD parameters ----------- ######
         if use_cartesian == True:
             self.setpoint_location = [0.0, 0.0, 3.0]
-            self.Kp = [10, 0, 100]
+            self.Kp = [10, -10, 50]
             self.Ki = [0, 0, 0]
-            self.Kd = [400, 0, 2000]
+            self.Kd = [400, -400, 2000]
         else:
             self.setpoint_location = [19.0, 72.0, 3.0]
             self.Kp = [1080000, 1140000, 48]
@@ -105,6 +110,9 @@ class Edrone():
         cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
         cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2]
         
+        #self.rpyt_cmd.rcRoll = 1500 + cartesian_y_control
+        #self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control
+
         self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) - cartesian_y_control*np.sin(self.current_attitude[2])
         self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) + cartesian_y_control*np.cos(self.current_attitude[2])
         self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
@@ -119,6 +127,7 @@ class Edrone():
 
         ###### ----------- Publishing messages --------- ######
         self.rpyt_pub.publish(self.rpyt_cmd)
+
 def location_not_reached(actual, desired):
     error_on_x = abs(desired[0] - actual[0]) 
     error_on_y = abs(desired[1] - actual[1]) 
@@ -135,69 +144,33 @@ def location_not_reached(actual, desired):
     else:
         retval = False
 
-    print(f"retval: {retval} -> {x_bool}, {y_bool}, {z_bool}")
+    #print(f"retval: {retval} -> {x_bool}, {y_bool}, {z_bool}")
     return retval
 
 def main():
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
-    if use_cartesian == True:
-        e_drone.setpoint_location = [0.0, 0.0, 3.0]
-        while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
+    for i in range(len(e_drone.desired_location)):
+
+        e_drone.setpoint_location = e_drone.desired_location[i]
+        print(f"drone target: {e_drone.setpoint_location}")
+        if use_cartesian == True:
+            while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
+                e_drone.pid()
+                time.sleep(0.05)
+        else: 
+            while ((e_drone.drone_location[0] > 19.0+0.000004517 or e_drone.drone_location[0] < 19.0-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
+                e_drone.pid()
+                time.sleep(0.05)
+
+        rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
+
+        # pause of 10 sec to stablize the drone at that position
+        t = time.time()
+        while time.time() -t < 10:
             e_drone.pid()
             time.sleep(0.05)
-    else:   
-        e_drone.setpoint_location = [19.0, 72.0, 3]
-        while ((e_drone.drone_location[0] > 19.0+0.000004517 or e_drone.drone_location[0] < 19.0-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
-            e_drone.pid()
-            time.sleep(0.05)
-
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
-
-    # pause of 10 sec to stablize the drone at that position
-    t = time.time()
-    while time.time() -t < 10:
-        e_drone.pid()
-        time.sleep(0.05)
-
-    if use_cartesian == True:
-        e_drone.setpoint_location = [5.0, 0.0, 3.0]
-        while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
-            e_drone.pid()
-            time.sleep(0.05)
-    else:   
-        e_drone.setpoint_location = [19.0000451704, 72.0, 3]
-        while ((e_drone.drone_location[0] > 19.00004517040+0.000004517 or e_drone.drone_location[0] < 19.00004517040-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 3.0+0.2 or e_drone.drone_location[2] < 3.0-0.2)):
-            e_drone.pid()
-            time.sleep(0.05)
-
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
-    
-    # pause of 10 sec to stablize the drone at that position
-    t = time.time()
-    while time.time() -t < 10:
-        e_drone.pid()
-        time.sleep(0.05)
-
-    if use_cartesian == True:
-        e_drone.setpoint_location = [5.0, 0.0, 1.0]
-        while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
-            e_drone.pid()
-            time.sleep(0.05)
-    else:   
-        e_drone.setpoint_location = [19.0000451704, 72.0, 0.31]
-        while ((e_drone.drone_location[0] > 19.00004517040+0.000004517 or e_drone.drone_location[0] < 19.00004517040-0.000004517) or (e_drone.drone_location[1] >  72.0+0.0000047487 or e_drone.drone_location[1] < 72.0-0.0000047487) or (e_drone.drone_location[2] > 0.31+0.2 or e_drone.drone_location[2] < 0.31-0.2)):
-            e_drone.pid()
-            time.sleep(0.05)
-    
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
-
-    # pause of 10 sec to stablize the drone at that position
-    t = time.time()
-    while time.time() -t < 10:
-        e_drone.pid()
-        time.sleep(0.05)
 
     # turning off
     e_drone.rpyt_cmd.rcRoll = 1500
@@ -211,14 +184,16 @@ def main():
 
 if __name__ == '__main__':
 
+    print("[CONTROLL] Waiting 4 seconds before initialization")
     t = time.time()
     while time.time() -t < 4:
         pass
 
     e_drone = Edrone()
 
+    print("[CONTROLL] Waiting 5 seconds before start")
     t = time.time()
-    while time.time() -t < 1:
+    while time.time() -t < 5:
         pass
 
     while not rospy.is_shutdown():

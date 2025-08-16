@@ -2,20 +2,36 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Leggi il file CSV
-df = pd.read_csv('drone_positions.csv')  # sostituisci 'file.csv' con il nome del tuo file
+df = pd.read_csv('drone_positions.csv')
 
-df.columns = ['rcRoll', 'rcPitch', 'rcThrottle']
+# Rinominare le colonne
+df.columns = ['rcRoll', 'rcPitch', 'rcThrottle', 'pidX', 'pidY', 'pidZ']
 
-# Plot
-plt.figure(figsize=(10,6))
-plt.plot(df['rcRoll'], label='rcRoll')
-plt.plot(df['rcPitch'], label='rcPitch')
-plt.plot(df['rcThrottle'], label='rcThrottle')
+# Crea una figura con 2 subplot (2 righe, 1 colonna)
+fig, axs = plt.subplots(1, 1, figsize=(12, 10), sharex=True)
 
-plt.xlabel('Index')
-plt.ylabel('Valori')
-plt.title('Plot colonne rcRoll, rcPitch, rcThrottle')
-plt.legend()
-plt.grid(True)
-plt.savefig('saved_csv.png')
+# Primo subplot: rcRoll, rcPitch, rcThrottle
+axs.plot(df['rcRoll'], label='rcRoll')
+axs.plot(df['rcPitch'], label='rcPitch')
+axs.plot(df['rcThrottle'], label='rcThrottle')
+axs.set_ylabel('Valori RC')
+axs.set_title('Comandi RC')
+axs.legend()
+axs.grid(True)
+
+# Secondo subplot: pidX, pidY, pidZ
+'''
+axs[1].plot(df['pidX'], label='pidX')
+axs[1].plot(df['pidY'], label='pidY')
+axs[1].plot(df['pidZ'], label='pidZ')
+axs[1].set_xlabel('Index')
+axs[1].set_ylabel('Valori PID')
+axs[1].set_title('Valori PID X, Y, Z')
+axs[1].legend()
+axs[1].grid(True)
+'''
+
+# Salva e mostra
+plt.tight_layout()
+plt.savefig('drone_plots.png')
 plt.show()
