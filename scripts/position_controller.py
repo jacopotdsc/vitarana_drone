@@ -24,8 +24,7 @@ class Edrone():
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
         if use_cartesian == True:
-            self.desired_location = [[0.0, 0.0, 3.0 ], [5.0, 0.0, 3.0], [5.0, 0.0, 0.0]]
-            #self.desired_location = [[0.0, 0.0, 3.0 ], [0.0, 5.0, 3.0], [0.0, 5.0, 0.0]]
+            self.desired_location = [[5.0, 5.0, 3.0 ], [5.0, 5.0, 3.0], [5.0, 5.0, 0.0]]
         else:
             self.desired_location = [[19.0, 72.0, 3.0], [19.0000451704, 72.0, 3.0] ,[19.0000451704, 72.0, 0.31]]
 
@@ -39,9 +38,9 @@ class Edrone():
         ###### ----------- PD parameters ----------- ######
         if use_cartesian == True:
             self.setpoint_location = [0.0, 0.0, 3.0]
-            self.Kp = [10, -10, 50]
+            self.Kp = [10, 10, 50]
             self.Ki = [0, 0, 0]
-            self.Kd = [400, -400, 2000]
+            self.Kd = [400, 400, 2000]
         else:
             self.setpoint_location = [19.0, 72.0, 3.0]
             self.Kp = [1080000, 1140000, 48]
@@ -113,8 +112,8 @@ class Edrone():
         #self.rpyt_cmd.rcRoll = 1500 + cartesian_y_control
         #self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control
 
-        self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) - cartesian_y_control*np.sin(self.current_attitude[2])
-        self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) + cartesian_y_control*np.cos(self.current_attitude[2])
+        self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
+        self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) - cartesian_y_control*np.cos(self.current_attitude[2])
         self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
 
         ##### ------------ Clamping -------------- ######
