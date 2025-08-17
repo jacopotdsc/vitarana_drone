@@ -11,6 +11,9 @@ import time
 import tf
 import csv
 
+TIME_BEFORE_INIT = 10
+TIME_BEFORE_START_TASK = 2
+
 def clamp(value, min_value, max_value):
     return max(min(value, max_value), min_value)
 
@@ -24,7 +27,9 @@ class Edrone():
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
         if use_cartesian == True:
-            self.desired_location = [[5.0, 5.0, 3.0 ], [5.0, 5.0, 3.0], [5.0, 5.0, 0.0]]
+            h = 2.0
+            l = 3.0
+            self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
         else:
             self.desired_location = [[19.0, 72.0, 3.0], [19.0000451704, 72.0, 3.0] ,[19.0000451704, 72.0, 0.31]]
 
@@ -167,7 +172,7 @@ def main():
 
         # pause of 10 sec to stablize the drone at that position
         t = time.time()
-        while time.time() -t < 10:
+        while time.time() -t < TIME_BEFORE_START_TASK:
             e_drone.pid()
             time.sleep(0.05)
 
@@ -183,17 +188,13 @@ def main():
 
 if __name__ == '__main__':
 
-    print("[CONTROLL] Waiting 4 seconds before initialization")
+    
+    print(F"[CONTROLL] Waiting {TIME_BEFORE_START_TASK} seconds initialize and start task")
     t = time.time()
-    while time.time() -t < 4:
+    while time.time() -t < TIME_BEFORE_INIT:
         pass
 
     e_drone = Edrone()
-
-    print("[CONTROLL] Waiting 5 seconds before start")
-    t = time.time()
-    while time.time() -t < 5:
-        pass
 
     while not rospy.is_shutdown():
         with open("/home/vboxuser/Desktop/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "w", newline="") as f:
