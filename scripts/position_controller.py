@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 from vitarana_drone.msg import *
-from sensor_msgs.msg import NavSatFix
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
+from nav_msgs.msg import Odometry
+from std_msgs.msg import Float32, Bool
 from gazebo_msgs.msg import ModelStates
 import rospy
 import numpy as np
@@ -24,9 +24,16 @@ class Edrone():
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
+
+        self.car_location = []
+
+        self.reached_desired_height = False
+        self.reached_car = False
         h = 2.0
         l = 3.0
-        self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
+        #self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
+        self.desired_location = [0.0, 0.0, h]
+        self.car_location = []
      
         ###### ----------- Drone message command ----------- ######
         self.rpyt_cmd = edrone_cmd()
@@ -48,13 +55,28 @@ class Edrone():
 
         ###### ----------- ROS topics ----------- ######
         self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
-        self.x_error = rospy.Publisher('/x_error', Float32, queue_size=1)
-        self.y_error = rospy.Publisher('/y_error', Float32, queue_size=1)
-        self.z_error = rospy.Publisher('/z_error', Float32, queue_size=1)
+        self.stop_car_pub= rospy.Publisher('/simulation_state', Bool, queue_size=1)
+
+        self.x_error_pub = rospy.Publisher('/x_error', Float32, queue_size=1)
+        self.y_error_pub = rospy.Publisher('/y_error', Float32, queue_size=1)
+        self.z_error_pub = rospy.Publisher('/z_error', Float32, queue_size=1)
 
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.ground_truth_callback)
+        rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
+        rospy.Subscriber('/simulation_state', Bool, self.stop_drone)
 
+    def car_odom_callback(self, msg):
+
+        if self.reached_desired_height == False:
+            return
+
+        car_pos = msg.pose.pose.position
+        self.car_location = [car_pos.x, car_pos.y, car_pos.z]
+        self.desired_location = self.car_location
+
+        print(self.desired_location)
+            
     def imu_callback(self, msg):
         '''
         IMU data are given in quaternion format. 
@@ -80,6 +102,26 @@ class Edrone():
         self.drone_location[1] = pos.y
         self.drone_location[2] = pos.z
 
+    def check_reached_car(self):
+
+        error_on_x = abs(self.drone_location[0] - self.car_location[0]) 
+        error_on_y = abs(self.drone_location[1] - self.car_location[1]) 
+        error_on_z = abs(self.drone_location[2] - self.car_location[2])
+        th_error = 0.1 
+
+        if( (error_on_x < th_error) and (error_on_y < th_error) and (error_on_z < th_error)):
+            self.reached_car = True
+            self.check_reached_car()
+            self.stop_car_pub.publish(Bool(data=True))
+        
+    def stop_drone(self, msg):
+        if msg.data == True:
+
+            e_drone.rpyt_cmd.rcRoll = 1500
+            e_drone.rpyt_cmd.rcPitch = 1500
+            e_drone.rpyt_cmd.rcYaw = 1500
+            e_drone.rpyt_cmd.rcThrottle = 1000
+            e_drone.rpyt_pub.publish(e_drone.rpyt_cmd)
 
     def pid(self):
         ###### ----------- Computing error: pid ---------- ######
@@ -130,14 +172,17 @@ def main():
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
-    for i in range(len(e_drone.desired_location)):
-
-        e_drone.setpoint_location = e_drone.desired_location[i]
+    #for i in range(len(e_drone.desired_location)):
+    while(True):
+        
+        e_drone.setpoint_location = e_drone.desired_location #[i]
         print(f"drone target: {e_drone.setpoint_location}")
         
         while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
             e_drone.pid()
             time.sleep(0.05)
+        
+        e_drone.reached_desired_height = True
         rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
 
         # pause of 10 sec to stablize the drone at that position
@@ -145,13 +190,6 @@ def main():
         while time.time() -t < TIME_BEFORE_START_TASK:
             e_drone.pid()
             time.sleep(0.05)
-
-    # turning off
-    e_drone.rpyt_cmd.rcRoll = 1500
-    e_drone.rpyt_cmd.rcPitch = 1500
-    e_drone.rpyt_cmd.rcYaw = 1500
-    e_drone.rpyt_cmd.rcThrottle = 1000
-    e_drone.rpyt_pub.publish(e_drone.rpyt_cmd)
 
     rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
     rospy.loginfo("destination reached!!!")
