@@ -21,7 +21,7 @@ use_cartesian = True
 
 class Edrone():
     def __init__(self):
-        rospy.init_node('position_controller')
+        rospy.init_node('position_\ntroller')
 
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
@@ -29,7 +29,8 @@ class Edrone():
         if use_cartesian == True:
             h = 2.0
             l = 3.0
-            self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
+            #self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
+            self.desired_location = [[0.0, 0.0, h], [3.0, 0.0, h], [3.0, 0.0, 0.0]]
         else:
             self.desired_location = [[19.0, 72.0, 3.0], [19.0000451704, 72.0, 3.0] ,[19.0000451704, 72.0, 0.31]]
 
@@ -39,6 +40,10 @@ class Edrone():
         self.rpyt_cmd.rcPitch = 1500.0
         self.rpyt_cmd.rcYaw = 1500.0
         self.rpyt_cmd.rcThrottle = 1500.0
+
+        ###### ----------- Potential field parameters ----------- ######
+        self.Ka = [10, 10, 10]
+        self.Kr = [5, 5, 0]
 
         ###### ----------- PD parameters ----------- ######
         if use_cartesian == True:
@@ -58,7 +63,8 @@ class Edrone():
         self.integral_error = [0.0, 0.0, 0.0]
 
         ###### ----------- ROS topics ----------- ######
-        self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
+        #self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
+        self.cartesian_thrust_pub = rospy.Publisher('/edrone/cartesian_thrust', cartesian_thrust, queue_size=1)
         self.x_error = rospy.Publisher('/x_error', Float32, queue_size=1)
         self.y_error = rospy.Publisher('/y_error', Float32, queue_size=1)
         self.z_error = rospy.Publisher('/z_error', Float32, queue_size=1)
@@ -105,32 +111,28 @@ class Edrone():
         ###### ----------- Computing error: pid ---------- ######
         for i in range(3):
             self.proportional_error[i]  = self.setpoint_location[i] - self.drone_location[i]
-            self.integral_error[i]      = self.integral_error[i] + self.proportional_error[i]
-            self.derivate_error[i]      = self.proportional_error[i] - self.prev_error_value[i]
-            self.prev_error_value[i]    = self.proportional_error[i]
-
-        ###### ----------- PID equation ---------- ######
-        cartesian_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0]
-        cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
-        cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2]
         
-        #self.rpyt_cmd.rcRoll = 1500 + cartesian_y_control
-        #self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control
+        d_potential_attrative  = [k * e for k, e in zip(self.Ka, self.proportional_error)]
+        d_potential_repulsive = 0
 
-        self.rpyt_cmd.rcRoll = 1500 #+ cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
-        self.rpyt_cmd.rcPitch = 1500 #+ cartesian_x_control*np.sin(self.current_attitude[2]) - cartesian_y_control*np.cos(self.current_attitude[2])
-        self.rpyt_cmd.rcThrottle = 1800 #+ cartesian_z_control
+        thrust_roll_controll =  1500 + self.Ka[0]*d_potential_attrative[0] + self.Kr[0]*d_potential_repulsive
+        thrust_pitch_controll = 1500 + self.Ka[1]*d_potential_attrative[1] + self.Kr[1]*d_potential_repulsive
+        thrust_yaw_controll = 1500
+        thrust_throttle_controll = 1500 + self.Ka[2]*d_potential_attrative[2] + self.Kr[2]*d_potential_repulsive
 
         ##### ------------ Clamping -------------- ######
-        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1200, 1800)
-        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1200, 1800)
-        self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000)
-
-        writer = csv.writer(f)
-        writer.writerow([str(self.rpyt_cmd.rcRoll), str(self.rpyt_cmd.rcPitch), str(self.rpyt_cmd.rcThrottle), str(cartesian_x_control), str(cartesian_y_control), str(cartesian_z_control)])
+        thrust_roll_controll= clamp(thrust_roll_controll, 1200, 1800)
+        thrust_pitch_controll = clamp(thrust_pitch_controll, 1200, 1800)
+        thrust_throttle_controll = clamp(thrust_throttle_controll, 1000, 2000)
 
         ###### ----------- Publishing messages --------- ######
-        self.rpyt_pub.publish(self.rpyt_cmd)
+        cartesian_thrust_msg = cartesian_thrust()
+        cartesian_thrust_msg.thrustRoll     = thrust_roll_controll * 0.00315 - 4.725
+        cartesian_thrust_msg.thrustPitch    = thrust_pitch_controll * 0.00315 - 4.725
+        cartesian_thrust_msg.thrustYaw      = thrust_yaw_controll * 0.00630 - 9.45
+        cartesian_thrust_msg.Throttle       = thrust_throttle_controll * 1.024  - 1024.0
+        self.cartesian_thrust_pub.publish(cartesian_thrust_msg)
+
 
 def location_not_reached(actual, desired):
     error_on_x = abs(desired[0] - actual[0]) 
