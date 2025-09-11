@@ -75,7 +75,7 @@ class Edrone():
         self.car_location = [car_pos.x, car_pos.y, car_pos.z]
         self.desired_location = self.car_location
 
-        print(self.desired_location)
+        #print(self.desired_location)
             
     def imu_callback(self, msg):
         '''
@@ -110,6 +110,7 @@ class Edrone():
         th_error = 0.1 
 
         if( (error_on_x < th_error) and (error_on_y < th_error) and (error_on_z < th_error)):
+            #print("REACHED CAR STOPPING DRONE")
             self.reached_car = True
             self.check_reached_car()
             self.stop_car_pub.publish(Bool(data=True))
@@ -173,7 +174,7 @@ def main():
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
     #for i in range(len(e_drone.desired_location)):
-    while(True):
+    while not rospy.is_shutdown():
         
         e_drone.setpoint_location = e_drone.desired_location #[i]
         print(f"drone target: {e_drone.setpoint_location}")

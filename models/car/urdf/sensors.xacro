@@ -22,7 +22,7 @@
   <!-- Inertia matrices -->
   <xacro:include filename="$(find my_robot_description)/urdf/macros.xacro" />
   <!-- Gazebo aspects of the robot -->
-  <xacro:include filename="$(find my_robot_description)/urdf/my_robot.gazebo" />
+  <!--xacro:include filename="$(find my_robot_description)/urdf/my_robot.gazebo" /-->
 
 
   <link name="camera_link">

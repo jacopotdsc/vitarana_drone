@@ -19,10 +19,32 @@
 	<!-- Import Rviz colors -->
 	<xacro:include filename="$(find my_robot_description)/urdf/materials.xacro" />
 	<!-- Gazebo aspects of the robot -->
-	<xacro:include filename="$(find my_robot_description)/urdf/my_robot.gazebo" />
+	<!--xacro:include filename="$(find my_robot_description)/urdf/my_robot.gazebo" /-->
 	<!-- Inertia matrices -->
 	<xacro:include filename="$(find my_robot_description)/urdf/macros.xacro" />
 	
+	<gazebo reference="chassis">
+
+		<mu1>0.3</mu1>
+		<mu2>0.3</mu2>
+
+		<material>Gazebo/Red</material>
+	</gazebo>
+
+
+	<!-- Caster wheel -->
+	<gazebo reference="caster_wheel">
+		<mu1>0.0</mu1>
+		<mu2>0.0</mu2>
+
+		<kp>1000000.0</kp>
+		<kd>100.0</kd>
+		<minDepth>0.001</minDepth>
+		<maxVel>1.0</maxVel>
+
+		<material>Gazebo/Chrome</material>
+	</gazebo>
+
 
 	<!-- Used for fixing robot to Gazebo 'chassis' -->
 	<link name="base_footprint" />
@@ -102,13 +124,48 @@
 
 	</link>
 
-
-
 	<xacro:wheel lr="left" tY="-1"/>
 	<xacro:wheel lr="right" tY="1"/>
 
+	<gazebo>
+		<plugin name="differential_drive_controller" 
+					filename="libgazebo_ros_diff_drive.so">
+
+		<robotNamespace>/my_robot</robotNamespace>
+				
+		<alwaysOn>true</alwaysOn>
+		<updateRate>100</updateRate>
+
+		<leftJoint>left_wheel_hinge</leftJoint>
+		<rightJoint>right_wheel_hinge</rightJoint>
+
+		<wheelSeparation>${chassisWidth-2*wheelOffsetY}</wheelSeparation>
+		<wheelDiameter>${2*wheelRadius}</wheelDiameter>
+
+		<torque>20</torque>
+		
+		<commandTopic>cmd_vel</commandTopic>     
+		<odometryTopic>odom</odometryTopic>      
+		<odometryFrame>odom</odometryFrame>     
+		<robotBaseFrame>base_footprint</robotBaseFrame>
+		
+		<legacyMode>false</legacyMode>
+		
+		<rosDebugLevel>Debug</rosDebugLevel>
+		<publishOdomTF>true</publishOdomTF>      <!-- tag corretto -->
+		<publish_tf>true</publish_tf>
+		<publishWheelTF>false</publishWheelTF>
+		<publishWheelJointState>false</publishWheelJointState>
+		
+		<wheelAcceleration>5</wheelAcceleration>
+		<wheelTorque>20</wheelTorque>
+
+		<odometrySource>world</odometrySource>
+
+		</plugin>
+	</gazebo>
 
 	<!-- Sensor models -->
-	<xacro:include filename="$(find my_robot_description)/urdf/sensors.xacro" />
+	<!--xacro:include filename="$(find my_robot_description)/urdf/sensors.xacro" /-->
 
 </robot>
