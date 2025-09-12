@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+
+<!--
+	all the gazebo-specific aspects of our robot
+
+  http://gazebosim.org/tutorials/?tut=ros_urdf
+-->
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ros_control plugin -->
+  <!--gazebo>
+    <plugin name="gazebo_ros_control" 
+            filename="libgazebo_ros_control.so">
+      <robotNamespace>/my_robot</robotNamespace>
+      <robotParam>/robot_description</robotParam>
+      <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
+    </plugin>
+  </gazebo-->
+
+
+  <!--
+    The plugin broadcasts a body's pose and rates through ROS nav_msgs::Odometry message.
+    The plugin broadcasts pose and rate of a body named "chassis" over ROS topic name "my_robot/odom".
+  -->
+
+  <!-- Chassis -->
+  <gazebo reference="chassis">
+
+    <mu1>0.3</mu1>
+    <mu2>0.3</mu2>
+
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+
+  <!-- Caster wheel -->
+  <gazebo reference="caster_wheel">
+    <mu1>0.0</mu1>
+    <mu2>0.0</mu2>
+
+    <kp>1000000.0</kp>
+    <kd>100.0</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>1.0</maxVel>
+
+    <material>Gazebo/Chrome</material>
+  </gazebo>
+
+
+  <gazebo>
+    <plugin name="differential_drive_controller" 
+    		    filename="libgazebo_ros_diff_drive.so">
+
+      <robotNamespace>/my_robot</robotNamespace>
+    		  
+      <alwaysOn>true</alwaysOn>
+      <updateRate>100</updateRate>
+
+      <leftJoint>left_wheel_hinge</leftJoint>
+      <rightJoint>right_wheel_hinge</rightJoint>
+
+      <wheelSeparation>${chassisWidth-2*wheelOffsetY}</wheelSeparation>
+      <wheelDiameter>${2*wheelRadius}</wheelDiameter>
+
+      <torque>20</torque>
+      
+      <commandTopic>cmd_vel</commandTopic>     
+      <odometryTopic>odom</odometryTopic>      
+      <odometryFrame>odom</odometryFrame>     
+      <robotBaseFrame>base_footprint</robotBaseFrame>
+      
+      <legacyMode>false</legacyMode>
+      
+      <rosDebugLevel>Debug</rosDebugLevel>
+      <publishOdomTF>true</publishOdomTF>      <!-- tag corretto -->
+      <publish_tf>true</publish_tf>
+      <publishWheelTF>false</publishWheelTF>
+      <publishWheelJointState>false</publishWheelJointState>
+      
+      <wheelAcceleration>5</wheelAcceleration>
+      <wheelTorque>20</wheelTorque>
+
+      <odometrySource>world</odometrySource>
+
+    </plugin>
+  </gazebo>
+
+</robot>
