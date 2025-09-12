@@ -5,17 +5,6 @@
         <arg name="world_name"  value="$(find vitarana_drone)/worlds/task.world"/>
     </include>
 
-    <arg name="record" default="false"/>
-	<arg name="duration" default="60"/>
-	<arg name="rec_name" default="Task_1_VD.bag"/>
-
-	<group if="$(arg record)">
-
-	    <node name="rosbag_record_position" pkg="rosbag" type="record"
-	       args="record -O $(find vitarana_drone)/bag_files/$(arg rec_name) --duration=$(arg duration) /edrone/gps /edrone/gps_velocity" output="screen"/>
-
-	</group>
-
 	<node pkg="vitarana_drone" type="attitude_controller.py" name="attitude_controller" output="screen"/>
 
 	<node pkg="vitarana_drone" type="position_controller.py" name="position_controller" output="screen"/>
@@ -27,7 +16,6 @@
 	<param name="robot_description"
            command="$(find xacro)/xacro '$(find vitarana_drone)/models/car/urdf/my_robot.xacro'" />
 
-    <!-- Spawna il modello in Gazebo -->
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" output="screen"
           args="-param robot_description
                 -urdf
@@ -36,8 +24,8 @@
 
     <node pkg="vitarana_drone" type="car_trajectory.py" name="car_trajectory" output="screen">
         <param name="trajectory" value="circle" />
-        <param name="linear_velocity" value="0.5" />
-        <param name="angular_velocity" value="0.6" />
+        <param name="linear_velocity" value="0.3" />
+        <param name="angular_velocity" value="1.0" />
     </node>
 
 </launch>

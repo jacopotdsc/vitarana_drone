@@ -2,6 +2,7 @@
 
 from vitarana_drone.msg import *
 from sensor_msgs.msg import Imu
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32, Bool
 from gazebo_msgs.msg import ModelStates
@@ -26,14 +27,15 @@ class Edrone():
         self.current_attitude = [0.0, 0.0, 0.0]
 
         self.car_location = []
+        self.car_velocity = []
 
         self.reached_desired_height = False
         self.reached_car = False
         h = 2.0
         l = 3.0
         #self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
-        self.desired_location = [0.0, 0.0, h]
-        self.car_location = []
+        #self.desired_location = [0.0, 0.0, h]
+        self.car_location = [0.0, 0.0, h]
      
         ###### ----------- Drone message command ----------- ######
         self.rpyt_cmd = edrone_cmd()
@@ -42,11 +44,11 @@ class Edrone():
         self.rpyt_cmd.rcYaw = 1500.0
         self.rpyt_cmd.rcThrottle = 1500.0
 
-        ###### ----------- PD parameters ----------- ######
-        self.setpoint_location = [0.0, 0.0, 3.0]
+        ###### ----------- adaptive PD parameters ----------- ######
         self.Kp = [10, 10, 50]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
+        self.Kav = [10, 10, 0]
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -64,18 +66,22 @@ class Edrone():
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.ground_truth_callback)
         rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
+        rospy.Subscriber("/my_robot/cmd_vel", Twist, self.car_vel_callback )
         rospy.Subscriber('/simulation_state', Bool, self.stop_drone)
 
     def car_odom_callback(self, msg):
-
         if self.reached_desired_height == False:
             return
+        else:
+            car_pos = msg.pose.pose.position
+            self.car_location = [car_pos.x, car_pos.y, car_pos.z]
 
-        car_pos = msg.pose.pose.position
-        self.car_location = [car_pos.x, car_pos.y, car_pos.z]
-        self.desired_location = self.car_location
+    def car_vel_callback(self, msg):
 
-        #print(self.desired_location)
+        if self.reached_desired_height == False:
+            self.car_velocity = [ 0.0, 0.0 ]
+        else:
+            self.car_velocity = [ msg.linear.x, msg.angular.z]
             
     def imu_callback(self, msg):
         '''
@@ -110,9 +116,8 @@ class Edrone():
         th_error = 0.1 
 
         if( (error_on_x < th_error) and (error_on_y < th_error) and (error_on_z < th_error)):
-            #print("REACHED CAR STOPPING DRONE")
+            print("REACHED CAR STOPPING DRONE")
             self.reached_car = True
-            self.check_reached_car()
             self.stop_car_pub.publish(Bool(data=True))
         
     def stop_drone(self, msg):
@@ -127,7 +132,7 @@ class Edrone():
     def pid(self):
         ###### ----------- Computing error: pid ---------- ######
         for i in range(3):
-            self.proportional_error[i]  = self.setpoint_location[i] - self.drone_location[i]
+            self.proportional_error[i]  = self.car_location[i] - self.drone_location[i]
             self.integral_error[i]      = self.integral_error[i] + self.proportional_error[i]
             self.derivate_error[i]      = self.proportional_error[i] - self.prev_error_value[i]
             self.prev_error_value[i]    = self.proportional_error[i]
@@ -173,13 +178,9 @@ def main():
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
-    #for i in range(len(e_drone.desired_location)):
     while not rospy.is_shutdown():
         
-        e_drone.setpoint_location = e_drone.desired_location #[i]
-        print(f"drone target: {e_drone.setpoint_location}")
-        
-        while (location_not_reached(e_drone.drone_location, e_drone.setpoint_location)):
+        while (location_not_reached(e_drone.drone_location, e_drone.car_location)):
             e_drone.pid()
             time.sleep(0.05)
         
