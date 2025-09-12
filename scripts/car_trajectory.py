@@ -2,6 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
 import math
 
 def publish_circle(pub, rate, v, omega):
@@ -55,10 +56,25 @@ def publish_straight(pub, rate, v):
         pub.publish(twist)
         rate.sleep()
 
+def stop_car(msg, pub):
+    if msg.data == True:
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        pub.publish(twist)
+
+        rospy.loginfo("Drone reached car. Stopping car")
+        rospy.signal_shutdown("[CT] Drone reached car. Stopping node")
+
+
 def main():
     rospy.init_node('car_trajectory', anonymous=True)
     pub = rospy.Publisher('/my_robot/cmd_vel', Twist, queue_size=10)
     rate = rospy.Rate(10)
+
+    rospy.Subscriber('/simulation_state', Bool, lambda msg: stop_car(msg, pub))
+
 
     traj = rospy.get_param('~trajectory', 'circle')
     v = rospy.get_param('~linear_velocity', 0.5)

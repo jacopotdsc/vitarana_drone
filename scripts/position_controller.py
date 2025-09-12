@@ -31,10 +31,8 @@ class Edrone():
 
         self.reached_desired_height = False
         self.reached_car = False
+
         h = 2.0
-        l = 3.0
-        #self.desired_location = [[l, 0.0, h ], [l, l, h], [-l, l, h+0.5], [-l, -l, h], [0.0, 0.0, h+3], [0.0, 0.0, 0.0] ]
-        #self.desired_location = [0.0, 0.0, h]
         self.car_location = [0.0, 0.0, h]
      
         ###### ----------- Drone message command ----------- ######
@@ -45,7 +43,7 @@ class Edrone():
         self.rpyt_cmd.rcThrottle = 1500.0
 
         ###### ----------- adaptive PD parameters ----------- ######
-        self.Kp = [10, 10, 50]
+        self.Kp = [10, 10, 20]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
         self.Kav = [10, 10, 0]
@@ -109,20 +107,25 @@ class Edrone():
         self.drone_location[2] = pos.z
 
     def check_reached_car(self):
+        dx = self.drone_location[0] - self.car_location[0]
+        dy = self.drone_location[1] - self.car_location[1]
+        dz = self.drone_location[2] - self.car_location[2]
 
-        error_on_x = abs(self.drone_location[0] - self.car_location[0]) 
-        error_on_y = abs(self.drone_location[1] - self.car_location[1]) 
-        error_on_z = abs(self.drone_location[2] - self.car_location[2])
-        th_error = 0.1 
+        dist = (dx**2 + dy**2 + dz**2) ** 0.5
+        th_error = 0.4
 
-        if( (error_on_x < th_error) and (error_on_y < th_error) and (error_on_z < th_error)):
-            print("REACHED CAR STOPPING DRONE")
+        if dist < th_error:
             self.reached_car = True
             self.stop_car_pub.publish(Bool(data=True))
+
+            return True
+        else:
+            return False
         
     def stop_drone(self, msg):
         if msg.data == True:
 
+            
             e_drone.rpyt_cmd.rcRoll = 1500
             e_drone.rpyt_cmd.rcPitch = 1500
             e_drone.rpyt_cmd.rcYaw = 1500
@@ -155,13 +158,14 @@ class Edrone():
         writer.writerow([str(self.rpyt_cmd.rcRoll), str(self.rpyt_cmd.rcPitch), str(self.rpyt_cmd.rcThrottle), str(cartesian_x_control), str(cartesian_y_control), str(cartesian_z_control)])
 
         ###### ----------- Publishing messages --------- ######
-        self.rpyt_pub.publish(self.rpyt_cmd)
+        if self.reached_car == False:
+            self.rpyt_pub.publish(self.rpyt_cmd)
 
 def location_not_reached(actual, desired):
     error_on_x = abs(desired[0] - actual[0]) 
     error_on_y = abs(desired[1] - actual[1]) 
     error_on_z = abs(desired[2] - actual[2])
-    th_error = 0.1 
+    th_error = 0.5
 
     x_bool = error_on_x > th_error 
     y_bool = error_on_y > th_error
@@ -184,17 +188,20 @@ def main():
             e_drone.pid()
             time.sleep(0.05)
         
-        e_drone.reached_desired_height = True
-        rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
+        if e_drone.reached_desired_height == False:
+            e_drone.reached_desired_height = True
+            rospy.loginfo("drone reached hovering state at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
 
-        # pause of 10 sec to stablize the drone at that position
-        t = time.time()
-        while time.time() -t < TIME_BEFORE_START_TASK:
+
+        while(e_drone.check_reached_car() == False):
             e_drone.pid()
             time.sleep(0.05)
+        
+        break
 
-    rospy.loginfo("drone reached point : "+ str(e_drone.drone_location))
-    rospy.loginfo("destination reached!!!")
+
+    rospy.loginfo("drone reached car at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
+    rospy.loginfo("Finished")
 
 if __name__ == '__main__':
 
