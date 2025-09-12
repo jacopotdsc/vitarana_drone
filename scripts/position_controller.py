@@ -27,7 +27,8 @@ class Edrone():
         self.current_attitude = [0.0, 0.0, 0.0]
 
         self.car_location = []
-        self.car_velocity = []
+        self.car_yaw = 0.0
+        self.car_velocity = [ 0.0, 0.0 ]
 
         self.reached_desired_height = False
         self.reached_car = False
@@ -46,12 +47,18 @@ class Edrone():
         self.Kp = [10, 10, 20]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
-        self.Kav = [10, 10, 0]
+        self.Kar = 10 
+        self.Kap = 10
+        #self.Kat = 10
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
         self.prev_error_value = [0.0, 0.0, 0.0]
         self.integral_error = [0.0, 0.0, 0.0]
+
+        self.prev_time = rospy.Time.now().to_sec()
+        self.use_adpt = 1
+        self.adpt_th = 2
 
         ###### ----------- ROS topics ----------- ######
         self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
@@ -73,6 +80,15 @@ class Edrone():
         else:
             car_pos = msg.pose.pose.position
             self.car_location = [car_pos.x, car_pos.y, car_pos.z]
+
+            car_quaternion = [0, 0, 0, 0]
+            car_quaternion[0] = msg.pose.pose.orientation.x
+            car_quaternion[1] = msg.pose.pose.orientation.y
+            car_quaternion[2] = msg.pose.pose.orientation.z
+            car_quaternion[3] = msg.pose.pose.orientation.w
+
+            car_roll, car_pitch, car_yaw = tf.transformations.euler_from_quaternion(car_quaternion)
+            self.car_yaw = car_yaw
 
     def car_vel_callback(self, msg):
 
@@ -124,13 +140,11 @@ class Edrone():
         
     def stop_drone(self, msg):
         if msg.data == True:
-
-            
-            e_drone.rpyt_cmd.rcRoll = 1500
-            e_drone.rpyt_cmd.rcPitch = 1500
-            e_drone.rpyt_cmd.rcYaw = 1500
-            e_drone.rpyt_cmd.rcThrottle = 1000
-            e_drone.rpyt_pub.publish(e_drone.rpyt_cmd)
+            self.rpyt_cmd.rcRoll = 1500
+            self.rpyt_cmd.rcPitch = 1500
+            self.rpyt_cmd.rcYaw = 1500
+            self.rpyt_cmd.rcThrottle = 1000
+            self.rpyt_pub.publish(self.rpyt_cmd)
 
     def pid(self):
         ###### ----------- Computing error: pid ---------- ######
@@ -140,9 +154,24 @@ class Edrone():
             self.derivate_error[i]      = self.proportional_error[i] - self.prev_error_value[i]
             self.prev_error_value[i]    = self.proportional_error[i]
 
+        ###### ----------- Computing adaptive pid ---------- ######
+        car_linear_velocity = self.car_velocity[0] 
+        car_angular_velocity = self.car_velocity[1]
+
+        current_time = rospy.Time.now().to_sec() 
+        dt = current_time - self.prev_time
+
+        velocity_roll_control = np.cos(self.car_yaw  + car_angular_velocity*dt )*car_linear_velocity
+        velocity_pitch_control = np.sin(self.car_yaw + car_angular_velocity*dt )*car_linear_velocity
+        velocity_throttle_control = (velocity_roll_control**2 + velocity_pitch_control**2)**0.5
+
+        self.prev_time = current_time
+
+        adpt_on = 1 if (self.proportional_error[0]**2 + self.proportional_error[1]**2 + self.proportional_error[2]**2) ** 0.5 <= self.adpt_th else 0
+
         ###### ----------- PID equation ---------- ######
-        cartesian_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0]
-        cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
+        cartesian_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0] + self.use_adpt*adpt_on*self.Kar*velocity_roll_control
+        cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1] + self.use_adpt*adpt_on*self.Kap*velocity_pitch_control
         cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2]
         
         self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
@@ -179,6 +208,10 @@ def location_not_reached(actual, desired):
     return retval
 
 def main():
+    e_drone = Edrone()
+    e_drone.use_adpt = 1 if rospy.get_param('~use_adaptive_controller', False) == True else 0
+    print(e_drone.use_adpt)
+
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
@@ -190,8 +223,7 @@ def main():
         
         if e_drone.reached_desired_height == False:
             e_drone.reached_desired_height = True
-            rospy.loginfo("drone reached hovering state at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
-
+            rospy.loginfo(f"drone reached hovering state at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
 
         while(e_drone.check_reached_car() == False):
             e_drone.pid()
@@ -200,7 +232,7 @@ def main():
         break
 
 
-    rospy.loginfo("drone reached car at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
+    rospy.loginfo(f"drone reached car at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
     rospy.loginfo("Finished")
 
 if __name__ == '__main__':
@@ -210,8 +242,6 @@ if __name__ == '__main__':
     t = time.time()
     while time.time() -t < TIME_BEFORE_INIT:
         pass
-
-    e_drone = Edrone()
 
     while not rospy.is_shutdown():
         with open("/home/vboxuser/Desktop/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "w", newline="") as f:

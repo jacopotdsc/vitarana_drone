@@ -7,14 +7,15 @@
 
 	<node pkg="vitarana_drone" type="attitude_controller.py" name="attitude_controller" output="screen"/>
 
-	<node pkg="vitarana_drone" type="position_controller.py" name="position_controller" output="screen"/>
+	<node pkg="vitarana_drone" type="position_controller.py" name="position_controller" output="screen">
+        <param name="use_adaptive_controller" value="True" /> <!-- "True", "False"-->
+    </node>
 
 	<node pkg="vitarana_drone" type="motor_api.py" name="motor_api" output="screen"/>
 
     <node pkg="vitarana_drone" type="plotter.py" name="plotter" output="screen"/>
 
-	<param name="robot_description"
-           command="$(find xacro)/xacro '$(find vitarana_drone)/models/car/urdf/my_robot.xacro'" />
+	<param name="robot_description" command="$(find xacro)/xacro '$(find vitarana_drone)/models/car/urdf/my_robot.xacro'" />
 
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" output="screen"
           args="-param robot_description
