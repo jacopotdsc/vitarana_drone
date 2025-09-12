@@ -2,7 +2,7 @@
 <launch>
     <include 
         file="$(find gazebo_ros)/launch/empty_world.launch">
-        <arg name="world_name"  value="$(find vitarana_drone)/worlds/task.world"/>
+        <arg name="world_name"  value="$(find vitarana_drone)/worlds/obstacles.world"/>
     </include>
 
 	<node pkg="vitarana_drone" type="attitude_controller.py" name="attitude_controller" output="screen"/>

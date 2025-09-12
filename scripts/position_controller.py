@@ -25,7 +25,7 @@ class Edrone():
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
-
+        self.obstacles_location = []
         self.car_location = []
         self.car_velocity = []
 
@@ -66,6 +66,7 @@ class Edrone():
         rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
         rospy.Subscriber("/my_robot/cmd_vel", Twist, self.car_vel_callback )
         rospy.Subscriber('/simulation_state', Bool, self.stop_drone)
+        rospy.Subscriber("/gazebo/model_states", ModelStates, self.obstacles_callback)
 
     def car_odom_callback(self, msg):
         if self.reached_desired_height == False:
@@ -98,6 +99,14 @@ class Edrone():
         self.current_attitude[1] = euler_angles[1]
         self.current_attitude[2] = euler_angles[2]
 
+    def obstacles_callback(self, msg):
+        cylinder_names = [name for name in msg.name if name.startswith("cylinder")]
+        self.obstacles_location = []
+        for name in cylinder_names:
+            idx = msg.name.index(name)
+            pos = msg.pose[idx].position
+            self.obstacles_location.append([pos.x, pos.y])
+    
     def ground_truth_callback(self, msg):
         idx = msg.name.index("edrone")
         pos = msg.pose[idx].position
@@ -161,6 +170,8 @@ class Edrone():
         if self.reached_car == False:
             self.rpyt_pub.publish(self.rpyt_cmd)
 
+        
+
 def location_not_reached(actual, desired):
     error_on_x = abs(desired[0] - actual[0]) 
     error_on_y = abs(desired[1] - actual[1]) 
@@ -180,7 +191,7 @@ def location_not_reached(actual, desired):
 
 def main():
     e_drone.pid()
-    rospy.loginfo("drone started from : " + str(e_drone.drone_location))
+    rospy.loginfo("drone started from : " + str(e_drone.drone_location))    
 
     while not rospy.is_shutdown():
         
@@ -214,6 +225,6 @@ if __name__ == '__main__':
     e_drone = Edrone()
 
     while not rospy.is_shutdown():
-        with open("/home/vboxuser/Desktop/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "w", newline="") as f:
+        with open("/home/alessandro/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "w", newline="") as f:
             main()
             break
