@@ -25,8 +25,9 @@ class Edrone():
         ###### ----------- Drone informations ----------- ######
         self.drone_location = [0.0, 0.0, 0.0]
         self.current_attitude = [0.0, 0.0, 0.0]
+        self.drone_velocity = [0.0, 0.0, 0.0]
 
-        self.car_location = []
+        self.car_location = [0.0, 0.0, 0.0]
         self.car_yaw = 0.0
         self.car_velocity = [ 0.0, 0.0 ]
 
@@ -34,7 +35,7 @@ class Edrone():
         self.reached_car = False
 
         h = 2.0
-        self.car_location = [0.0, 0.0, h]
+        self.hovering_location = [0.0, 0.0, h]
      
         ###### ----------- Drone message command ----------- ######
         self.rpyt_cmd = edrone_cmd()
@@ -49,7 +50,7 @@ class Edrone():
         self.Kd = [400, 400, 2000]
         self.Kar = 10 
         self.Kap = 10
-        #self.Kat = 10
+        self.Kaz = 10
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -59,6 +60,8 @@ class Edrone():
         self.prev_time = rospy.Time.now().to_sec()
         self.use_adpt = 1
         self.adpt_th = 2
+
+        self.th_check = 0.5
 
         ###### ----------- ROS topics ----------- ######
         self.rpyt_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
@@ -79,7 +82,7 @@ class Edrone():
             return
         else:
             car_pos = msg.pose.pose.position
-            self.car_location = [car_pos.x, car_pos.y, car_pos.z]
+            self.car_location = [car_pos.x, car_pos.y, 0.0]
 
             car_quaternion = [0, 0, 0, 0]
             car_quaternion[0] = msg.pose.pose.orientation.x
@@ -122,15 +125,33 @@ class Edrone():
         self.drone_location[1] = pos.y
         self.drone_location[2] = pos.z
 
+        vel = msg.twist[idx].linear
+        self.drone_velocity[0] = vel.x
+        self.drone_velocity[1] = vel.y
+        self.drone_velocity[2] = vel.z
+
     def check_reached_car(self):
         dx = self.drone_location[0] - self.car_location[0]
         dy = self.drone_location[1] - self.car_location[1]
         dz = self.drone_location[2] - self.car_location[2]
 
-        dist = (dx**2 + dy**2 + dz**2) ** 0.5
-        th_error = 0.4
+        vx = self.drone_velocity[0] - self.car_velocity[0]*np.cos(self.car_yaw)
+        vy = self.drone_velocity[1] - self.car_velocity[0]*np.sin(self.car_yaw)
+        vz = self.drone_velocity[2]
 
-        if dist < th_error:
+
+        print(f"{dx:.2f}, {dy:.2f} ,{dz:.2f} / {vx:.2f}, {vy:.2f} ,{vz:.2f}")
+
+        dist_x = dx <= 0.20
+        dist_y = dy <= 0.20
+        dist_z = dz <= 0.25
+
+        vel_x = abs(vx) <= 0.15
+        vel_y = abs(vy) <= 0.15
+        vel_z  = abs(vz) <= 0.10
+
+
+        if dist_x and dist_y and dist_z: #and vel_xy and vel_z:
             self.reached_car = True
             self.stop_car_pub.publish(Bool(data=True))
 
@@ -149,7 +170,10 @@ class Edrone():
     def pid(self):
         ###### ----------- Computing error: pid ---------- ######
         for i in range(3):
-            self.proportional_error[i]  = self.car_location[i] - self.drone_location[i]
+            if self.reached_desired_height == True:
+                self.proportional_error[i]  = self.car_location[i] - self.drone_location[i]
+            else:
+                self.proportional_error[i]  = self.hovering_location[i] - self.drone_location[i]
             self.integral_error[i]      = self.integral_error[i] + self.proportional_error[i]
             self.derivate_error[i]      = self.proportional_error[i] - self.prev_error_value[i]
             self.prev_error_value[i]    = self.proportional_error[i]
@@ -163,7 +187,6 @@ class Edrone():
 
         velocity_roll_control = np.cos(self.car_yaw  + car_angular_velocity*dt )*car_linear_velocity
         velocity_pitch_control = np.sin(self.car_yaw + car_angular_velocity*dt )*car_linear_velocity
-        velocity_throttle_control = (velocity_roll_control**2 + velocity_pitch_control**2)**0.5
 
         self.prev_time = current_time
 
@@ -172,7 +195,7 @@ class Edrone():
         ###### ----------- PID equation ---------- ######
         cartesian_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0] + self.use_adpt*adpt_on*self.Kar*velocity_roll_control
         cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1] + self.use_adpt*adpt_on*self.Kap*velocity_pitch_control
-        cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2]
+        cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2] 
         
         self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
         self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) - cartesian_y_control*np.cos(self.current_attitude[2])
@@ -210,20 +233,19 @@ def location_not_reached(actual, desired):
 def main():
     e_drone = Edrone()
     e_drone.use_adpt = 1 if rospy.get_param('~use_adaptive_controller', False) == True else 0
-    print(e_drone.use_adpt)
 
     e_drone.pid()
     rospy.loginfo("drone started from : " + str(e_drone.drone_location))
 
     while not rospy.is_shutdown():
         
-        while (location_not_reached(e_drone.drone_location, e_drone.car_location)):
+        while (location_not_reached(e_drone.drone_location, e_drone.hovering_location)):
             e_drone.pid()
             time.sleep(0.05)
         
         if e_drone.reached_desired_height == False:
             e_drone.reached_desired_height = True
-            rospy.loginfo(f"drone reached hovering state at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
+            rospy.loginfo("Drone reached hovering state at: [%.2f, %.2f]" % (e_drone.drone_location[0], e_drone.drone_location[1]))
 
         while(e_drone.check_reached_car() == False):
             e_drone.pid()
@@ -232,7 +254,7 @@ def main():
         break
 
 
-    rospy.loginfo(f"drone reached car at: ""[{e_drone.drone_location[0]:.2f}, {e_drone.drone_location[1]:.2f}]")
+    rospy.loginfo("Drone reached car at: [%.2f, %.2f]" % (e_drone.drone_location[0], e_drone.drone_location[1]))
     rospy.loginfo("Finished")
 
 if __name__ == '__main__':
