@@ -31,6 +31,8 @@ class Edrone():
         self.car_yaw = 0.0
         self.car_velocity = [ 0.0, 0.0 ]
 
+        self.obstacles_location = []
+
         self.reached_desired_height = False
         self.reached_car = False
 
@@ -48,8 +50,8 @@ class Edrone():
         self.Kp = [10, 10, 20]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
-        self.Kar = 10 
-        self.Kap = 10
+        self.Kar = 15 
+        self.Kap = 15
         self.Kaz = 10
        
         self.derivate_error = [0.0, 0.0, 0.0]
@@ -59,7 +61,7 @@ class Edrone():
 
         self.prev_time = rospy.Time.now().to_sec()
         self.use_adpt = 1
-        self.adpt_th = 2
+        self.adpt_th = 3
 
         self.th_check = 0.5
 
@@ -76,6 +78,7 @@ class Edrone():
         rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
         rospy.Subscriber("/my_robot/cmd_vel", Twist, self.car_vel_callback )
         rospy.Subscriber('/simulation_state', Bool, self.stop_drone)
+        rospy.Subscriber("/gazebo/model_states", ModelStates, self.obstacles_callback)
 
     def car_odom_callback(self, msg):
         if self.reached_desired_height == False:
@@ -117,6 +120,14 @@ class Edrone():
         self.current_attitude[1] = euler_angles[1]
         self.current_attitude[2] = euler_angles[2]
 
+    def obstacles_callback(self, msg):
+        cylinder_names = [name for name in msg.name if name.startswith("cylinder")]
+        self.obstacles_location = []
+        for name in cylinder_names:
+            idx = msg.name.index(name)
+            pos = msg.pose[idx].position
+            self.obstacles_location.append([pos.x, pos.y])
+    
     def ground_truth_callback(self, msg):
         idx = msg.name.index("edrone")
         pos = msg.pose[idx].position
@@ -150,8 +161,7 @@ class Edrone():
         vel_y = abs(vy) <= 0.15
         vel_z  = abs(vz) <= 0.10
 
-
-        if dist_x and dist_y and dist_z: #and vel_xy and vel_z:
+        if dist_x and dist_y and dist_z and vel_x and vel_y and vel_z:
             self.reached_car = True
             self.stop_car_pub.publish(Bool(data=True))
 
@@ -185,33 +195,45 @@ class Edrone():
         current_time = rospy.Time.now().to_sec() 
         dt = current_time - self.prev_time
 
-        velocity_roll_control = np.cos(self.car_yaw  + car_angular_velocity*dt )*car_linear_velocity
-        velocity_pitch_control = np.sin(self.car_yaw + car_angular_velocity*dt )*car_linear_velocity
-
         self.prev_time = current_time
-
         adpt_on = 1 if (self.proportional_error[0]**2 + self.proportional_error[1]**2 + self.proportional_error[2]**2) ** 0.5 <= self.adpt_th else 0
 
+        velocity_x_control = np.cos(self.car_yaw + car_angular_velocity*dt )*car_linear_velocity*dt
+        velocity_y_control = np.sin(self.car_yaw + car_angular_velocity*dt )*car_linear_velocity*dt
+
+        adpt_x_control = self.use_adpt*adpt_on*( self.Kar*velocity_x_control + self.car_location[0]) 
+        adpt_y_control = self.use_adpt*adpt_on*( self.Kap*velocity_y_control + self.car_location[1]) 
+        adpt_z_control = self.use_adpt*adpt_on*( 0 )
+
+        ###### ----------- Computing collision avoidance pid ---------- ######
+        ca_x_control = 0
+        ca_y_control = 0
+        ca_z_control = 0
+
+        ###### ----------- Computing base pid ---------- ######
+        base_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0] 
+        base_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
+        base_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2] 
+
         ###### ----------- PID equation ---------- ######
-        cartesian_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0] + self.use_adpt*adpt_on*self.Kar*velocity_roll_control
-        cartesian_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1] + self.use_adpt*adpt_on*self.Kap*velocity_pitch_control
-        cartesian_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2] 
-        
+        cartesian_x_control = base_x_control + adpt_x_control + ca_x_control
+        cartesian_y_control = base_y_control + adpt_y_control + ca_y_control
+        cartesian_z_control = base_z_control + adpt_z_control + ca_z_control
+
         self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
         self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) - cartesian_y_control*np.cos(self.current_attitude[2])
         self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
 
         ##### ------------ Clamping -------------- ######
-        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1200, 1800)
-        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1200, 1800)
+        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1000, 2000)
+        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1000, 2000)
         self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000)
-
-        writer = csv.writer(f)
-        writer.writerow([str(self.rpyt_cmd.rcRoll), str(self.rpyt_cmd.rcPitch), str(self.rpyt_cmd.rcThrottle), str(cartesian_x_control), str(cartesian_y_control), str(cartesian_z_control)])
 
         ###### ----------- Publishing messages --------- ######
         if self.reached_car == False:
             self.rpyt_pub.publish(self.rpyt_cmd)
+
+        
 
 def location_not_reached(actual, desired):
     error_on_x = abs(desired[0] - actual[0]) 
@@ -235,7 +257,7 @@ def main():
     e_drone.use_adpt = 1 if rospy.get_param('~use_adaptive_controller', False) == True else 0
 
     e_drone.pid()
-    rospy.loginfo("drone started from : " + str(e_drone.drone_location))
+    rospy.loginfo("drone started from : " + str(e_drone.drone_location))    
 
     while not rospy.is_shutdown():
         
@@ -265,7 +287,4 @@ if __name__ == '__main__':
     while time.time() -t < TIME_BEFORE_INIT:
         pass
 
-    while not rospy.is_shutdown():
-        with open("/home/vboxuser/Desktop/catkin_ws/src/vitarana_drone/scripts/drone_positions.csv", "w", newline="") as f:
-            main()
-            break
+    main()
