@@ -18,6 +18,7 @@ class Car:
 
         self.pub = rospy.Publisher('/my_robot/cmd_vel', Twist, queue_size=10)
         self.rate = rospy.Rate(10)
+        self.stop_node = False
 
         rospy.Subscriber('/simulation_state', Bool, lambda msg: self.stop_car(msg, self.pub))
         rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
@@ -37,22 +38,34 @@ class Car:
 
     def publish_circle(self):
         twist = Twist()
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self.stop_node:
             twist.linear.x = self.v
             twist.angular.z = self.omega
             self.pub.publish(twist)
             self.rate.sleep()
 
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        self.pub.publish(twist)
+
     def publish_figure8(self):
         twist = Twist()
         t_start = rospy.Time.now().to_sec()
 
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self.stop_node == False:
             t = rospy.Time.now().to_sec() - t_start
             twist.linear.x = self.v
             twist.angular.z = self.omega * math.cos(t)
             self.pub.publish(twist)
             self.rate.sleep()
+
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        self.pub.publish(twist)
 
     def publish_square(self):
         twist = Twist()
@@ -61,7 +74,7 @@ class Car:
 
         t_start = rospy.Time.now().to_sec()
 
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self.stop_node == False:
             t = rospy.Time.now().to_sec() - t_start
             cycle_time = side_time + turn_time
             phase = t % (cycle_time * 4)
@@ -76,21 +89,33 @@ class Car:
 
             self.pub.publish(twist)
             self.rate.sleep()
+        
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        self.pub.publish(twist)
 
     def publish_straight(self):
         twist = Twist()
         twist.linear.x = v
         twist.angular.z = 0.0
 
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self.stop_node == False:
             self.pub.publish(twist)
             self.rate.sleep()
+
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        self.pub.publish(twist)
 
     def publish_custom(self):
         car_setpoint = [ [4.0, -1.0], [6.0, -3.0], [3.0, -5.0], [0.0, 0.0]  ]
 
         i = 0
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self.stop_node == False:
             
             point = car_setpoint[i % len(car_setpoint)] 
             
@@ -118,7 +143,13 @@ class Car:
             twist.linear.x = v
             twist.angular.z = omega
             self.pub.publish(twist)
-            
+
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        self.pub.publish(twist)
+
     def car_odom_callback(self, msg):
         car_pos = msg.pose.pose.position
         self.car_location = [car_pos.x, car_pos.y, 0.0]
@@ -134,6 +165,8 @@ class Car:
 
     def stop_car(self, msg, pub):
         if msg.data == True:
+            self.stop_node = True
+
             twist = Twist()
             twist.linear.x = 0.0
             twist.angular.z = 0.0
