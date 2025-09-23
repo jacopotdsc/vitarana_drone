@@ -4,7 +4,7 @@ import rospy
 import rospkg
 import os
 import csv
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 
 class Plotter:
@@ -21,11 +21,16 @@ class Plotter:
 
         self.topics = {
             '/my_robot/odom': 'car_odom.csv',
+            '/drone_ca_control': 'ca_control.csv',
+            '/drone_base_control': 'base_control.csv',
+            '/drone_pose_pub': 'drone_pose.csv'
         }
 
         self.messages = {
             '/my_robot/odom': Odometry,
-            
+            '/drone_ca_control': PoseStamped,
+            '/drone_base_control': PoseStamped,
+            '/drone_pose_pub': PoseStamped
         }
 
         self.files = {}
@@ -50,17 +55,29 @@ class Plotter:
         rospy.spin()
 
     def generic_callback(self, msg, topic):
-        t = msg.header.stamp.to_sec()
         
         if isinstance(msg, PoseStamped):
-            x = msg.pose.position.x
-            y = msg.pose.position.y
-            z = msg.pose.position.z
+            if self.files[topic].tell() == 0:
+                self.writers[topic].writerow(["t", "x", "y", "z"])
+
+            t = f"{msg.header.stamp.to_sec():.3f}"
+            x = round(msg.pose.position.x, 2)
+            y = round(msg.pose.position.y, 2)
+            z = round(msg.pose.position.z, 2)
             self.writers[topic].writerow([t, x, y, z])
         elif isinstance(msg, Odometry):
-            x = msg.pose.pose.position.x
-            y = msg.pose.pose.position.y
-            z = msg.pose.pose.position.z
+            if self.files[topic].tell() == 0:
+                self.writers[topic].writerow(["t", "x", "y", "z"])
+
+            t = f"{msg.header.stamp.to_sec():.3f}"
+            x = round(msg.pose.pose.position.x, 2)
+            y = round(msg.pose.pose.position.y, 2)
+            z = round(msg.pose.pose.position.z, 2)
+            self.writers[topic].writerow([t, x, y, z])
+        elif isinstance(msg, Twist):
+            x = round(msg.linear.x, 2)
+            y = round(msg.linear.y, 2)
+            z = round(msg.linear.z, 2)
             self.writers[topic].writerow([t, x, y, z])
         else:
             rospy.logwarn(f"[PLOTTER] No message type define for {topic}: editat generic_callback in plotter.py")

@@ -2,7 +2,7 @@
 
 from vitarana_drone.msg import *
 from sensor_msgs.msg import Imu
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32, Bool
 from gazebo_msgs.msg import ModelStates
@@ -46,13 +46,19 @@ class Edrone():
         self.rpyt_cmd.rcYaw = 1500.0
         self.rpyt_cmd.rcThrottle = 1500.0
 
-        ###### ----------- adaptive PD parameters ----------- ######
+        ###### ----------- controller parameters ----------- ######
         self.Kp = [10, 10, 20]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
+
         self.Kar = 15 
         self.Kap = 15
         self.Kaz = 10
+
+        self.Kox = 30
+        self.Koy = 30
+        self.Koz = 0
+        self.obs_th = 4
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -73,12 +79,17 @@ class Edrone():
         self.y_error_pub = rospy.Publisher('/y_error', Float32, queue_size=1)
         self.z_error_pub = rospy.Publisher('/z_error', Float32, queue_size=1)
 
+        self.ca_pub = rospy.Publisher('/drone_ca_control', PoseStamped, queue_size=1)
+        self.base_pub = rospy.Publisher('/drone_base_control', PoseStamped, queue_size=1)
+        self.drone_pose_pub = rospy.Publisher('/drone_pose_pub', PoseStamped, queue_size=1)
+
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.ground_truth_callback)
         rospy.Subscriber("/my_robot/odom", Odometry, self.car_odom_callback )
         rospy.Subscriber("/my_robot/cmd_vel", Twist, self.car_vel_callback )
         rospy.Subscriber('/simulation_state', Bool, self.stop_drone)
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.obstacles_callback)
+
 
     def car_odom_callback(self, msg):
         if self.reached_desired_height == False:
@@ -141,6 +152,14 @@ class Edrone():
         self.drone_velocity[1] = vel.y
         self.drone_velocity[2] = vel.z
 
+        drone_pose_msg = PoseStamped()
+        drone_pose_msg.header.stamp = rospy.Time.now()
+        drone_pose_msg.pose.position.x = self.drone_location[0]
+        drone_pose_msg.pose.position.y = self.drone_location[1]
+        drone_pose_msg.pose.position.z = self.drone_location[2]
+
+        self.drone_pose_pub.publish(drone_pose_msg)
+
     def check_reached_car(self):
         dx = self.drone_location[0] - self.car_location[0]
         dy = self.drone_location[1] - self.car_location[1]
@@ -151,7 +170,7 @@ class Edrone():
         vz = self.drone_velocity[2]
 
 
-        print(f"{dx:.2f}, {dy:.2f} ,{dz:.2f} / {vx:.2f}, {vy:.2f} ,{vz:.2f}")
+        #print(f"{dx:.2f}, {dy:.2f} ,{dz:.2f} / {vx:.2f}, {vy:.2f} ,{vz:.2f}")
 
         dist_x = dx <= 0.20
         dist_y = dy <= 0.20
@@ -177,6 +196,44 @@ class Edrone():
             self.rpyt_cmd.rcThrottle = 1000
             self.rpyt_pub.publish(self.rpyt_cmd)
 
+    def compute_obstacle_avoidance(self):
+
+        ca_x_control = 0
+        ca_y_control = 0 
+        ca_z_control = 0
+
+        for o in self.obstacles_location:
+            obs_dist_x = o[0] - self.drone_location[0]
+            obs_dist_y = o[1] - self.drone_location[1]
+            obs_dist = ( obs_dist_x**2 + obs_dist_y**2)**0.5
+
+            if obs_dist > self.obs_th:
+                continue
+
+            car_dist_x = self.car_location[0] - self.drone_location[0]
+            car_dist_y = self.car_location[1] - self.drone_location[1]
+            car_dist = ( car_dist_x**2 + car_dist_y**2)**0.5
+            car_dir = [ car_dist_x/car_dist, car_dist_y/car_dist ]
+
+            norm_factor_x = (obs_dist_x/self.obs_th)**2
+            norm_factor_y = (obs_dist_y/self.obs_th)**2
+
+            ca_x_control += (1/norm_factor_x) * abs( obs_dist_y*self.Koy - obs_dist_x*self.Kox ) * car_dir[0]
+            ca_y_control += (1/norm_factor_y) * abs( obs_dist_x*self.Koy - obs_dist_y*self.Kox ) * car_dir[1]
+
+        ca_x_control = -ca_x_control
+        ca_y_control = -ca_y_control
+        ca_z_control = -ca_z_control*self.Koz
+
+        ca_msg = PoseStamped()
+        ca_msg.header.stamp = rospy.Time.now()
+        ca_msg.pose.position.x = ca_x_control
+        ca_msg.pose.position.y = ca_y_control
+        self.ca_pub.publish(ca_msg)
+
+        return ca_x_control, ca_y_control, ca_z_control
+    
+
     def pid(self):
         ###### ----------- Computing error: pid ---------- ######
         for i in range(3):
@@ -193,7 +250,7 @@ class Edrone():
         car_angular_velocity = self.car_velocity[1]
 
         current_time = rospy.Time.now().to_sec() 
-        dt = current_time - self.prev_time
+        dt = 0.25 #current_time - self.prev_time
 
         self.prev_time = current_time
         adpt_on = 1 if (self.proportional_error[0]**2 + self.proportional_error[1]**2 + self.proportional_error[2]**2) ** 0.5 <= self.adpt_th else 0
@@ -206,14 +263,19 @@ class Edrone():
         adpt_z_control = self.use_adpt*adpt_on*( 0 )
 
         ###### ----------- Computing collision avoidance pid ---------- ######
-        ca_x_control = 0
-        ca_y_control = 0
-        ca_z_control = 0
+        ca_x_control, ca_y_control , ca_z_control = self.compute_obstacle_avoidance()
 
         ###### ----------- Computing base pid ---------- ######
         base_x_control = self.Kp[0]*self.proportional_error[0] + self.Ki[0]*self.integral_error[0] + self.Kd[0]*self.derivate_error[0] 
         base_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
         base_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2] 
+
+        #print(f"base_x: {base_x_control:.2f}, base_y: {base_y_control:.2f}")
+        base_msg = PoseStamped()
+        base_msg.header.stamp = rospy.Time.now()
+        base_msg.pose.position.x = base_x_control
+        base_msg.pose.position.y = base_y_control
+        self.base_pub.publish(base_msg)
 
         ###### ----------- PID equation ---------- ######
         cartesian_x_control = base_x_control + adpt_x_control + ca_x_control
@@ -225,8 +287,8 @@ class Edrone():
         self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
 
         ##### ------------ Clamping -------------- ######
-        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1000, 2000)
-        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1000, 2000)
+        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1000, 1800)
+        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1000, 1800)
         self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000)
 
         ###### ----------- Publishing messages --------- ######
