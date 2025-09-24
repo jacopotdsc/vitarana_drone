@@ -36,7 +36,7 @@ class Edrone():
         self.reached_desired_height = False
         self.reached_car = False
 
-        h = 2.0
+        h = 4.0
         self.hovering_location = [0.0, 0.0, h]
      
         ###### ----------- Drone message command ----------- ######
@@ -59,6 +59,7 @@ class Edrone():
         self.Koy = 30
         self.Koz = 0
         self.obs_th = 4
+        self.d_safe = 0.5 # radius of the obstacle
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -96,7 +97,7 @@ class Edrone():
             return
         else:
             car_pos = msg.pose.pose.position
-            self.car_location = [car_pos.x, car_pos.y, 0.0]
+            self.car_location = [car_pos.x, car_pos.y, self.hovering_location[2]]
 
             car_quaternion = [0, 0, 0, 0]
             car_quaternion[0] = msg.pose.pose.orientation.x
@@ -181,9 +182,9 @@ class Edrone():
         vel_z  = abs(vz) <= 0.10
 
         if dist_x and dist_y and dist_z and vel_x and vel_y and vel_z:
-            self.reached_car = True
-            self.stop_car_pub.publish(Bool(data=True))
-
+            #self.reached_car = True
+            #self.stop_car_pub.publish(Bool(data=True))
+            return False
             return True
         else:
             return False
@@ -202,28 +203,65 @@ class Edrone():
         ca_y_control = 0 
         ca_z_control = 0
 
+        eps = 1e-6
+
+        # computing distance car w.r.t drone
+        px, py = self.drone_location[:2]
+        cx, cy = self.car_location[:2]
+
+        vx = cx - px       
+        vy = cy - py   
+
+        car_dist = (vx*vx + vy*vy) ** 0.5 + eps
+        car_dir = [vx / car_dist, vy / car_dist]
+
         for o in self.obstacles_location:
-            obs_dist_x = o[0] - self.drone_location[0]
-            obs_dist_y = o[1] - self.drone_location[1]
-            obs_dist = ( obs_dist_x**2 + obs_dist_y**2)**0.5
 
-            if obs_dist > self.obs_th:
+            # computing distance drone w.r.t obstacle
+            ox, oy = o[:2]
+            dx = px - ox        
+            dy = py - oy    
+            d = (dx*dx + dy*dy) ** 0.5 + eps
+
+            if d > self.obs_th:
                 continue
+            
+            # smoothing for guarantee continuity 
+            t = ( d - self.d_safe)/(self.obs_th - self.d_safe + eps)
+            if t <= 0.0:
+                w = 1.0
+            elif t >= 1.0:
+                w = 0.0
+            else:
+                w = 1.0 - (t*t*(3.0 - 2.0*t))
 
-            car_dist_x = self.car_location[0] - self.drone_location[0]
-            car_dist_y = self.car_location[1] - self.drone_location[1]
-            car_dist = ( car_dist_x**2 + car_dist_y**2)**0.5
-            car_dir = [ car_dist_x/car_dist, car_dist_y/car_dist ]
+            # computing obstacle direction
+            n_x = dx/d
+            n_y = dy/d
 
-            norm_factor_x = (obs_dist_x/self.obs_th)**2
-            norm_factor_y = (obs_dist_y/self.obs_th)**2
+            # repulsive force
+            rep_mag = self.Kox * w * (1.0/max(d, self.d_safe)) # max used to avoid singularities
+            rep_x = rep_mag * n_x
+            rep_y = rep_mag * n_y
 
-            ca_x_control += (1/norm_factor_x) * abs( obs_dist_y*self.Koy - obs_dist_x*self.Kox ) * car_dir[0]
-            ca_y_control += (1/norm_factor_y) * abs( obs_dist_x*self.Koy - obs_dist_y*self.Kox ) * car_dir[1]
+            # tangential force
+            cross = n_x * car_dir[1] - n_y * car_dir[0]
+            sign = 1.0 if cross >= 0.0 else -1.0    # choose tuning side
 
-        ca_x_control = -ca_x_control
-        ca_y_control = -ca_y_control
+            t_x = -n_y * sign
+            t_y =  n_x * sign
+            tan_mag = self.Koy * w * (1.0/min(1.0, abs(cross)))
+            tan_x = tan_mag * t_x
+            tan_y = tan_mag * t_y
+
+            ca_x_control += rep_x + tan_x
+            ca_y_control += rep_y + tan_y
+
         ca_z_control = -ca_z_control*self.Koz
+
+        ca_x_control = clamp(ca_x_control, -300, 300)
+        ca_y_control = clamp(ca_y_control, -300, 300)
+        ca_z_control = clamp(ca_z_control, -300, 300)
 
         ca_msg = PoseStamped()
         ca_msg.header.stamp = rospy.Time.now()
@@ -270,26 +308,28 @@ class Edrone():
         base_y_control = self.Kp[1]*self.proportional_error[1] + self.Ki[1]*self.integral_error[1] + self.Kd[1]*self.derivate_error[1]
         base_z_control = self.Kp[2]*self.proportional_error[2] + self.Ki[2]*self.integral_error[2] + self.Kd[2]*self.derivate_error[2] 
 
-        #print(f"base_x: {base_x_control:.2f}, base_y: {base_y_control:.2f}")
-        base_msg = PoseStamped()
-        base_msg.header.stamp = rospy.Time.now()
-        base_msg.pose.position.x = base_x_control
-        base_msg.pose.position.y = base_y_control
-        self.base_pub.publish(base_msg)
-
         ###### ----------- PID equation ---------- ######
-        cartesian_x_control = base_x_control + adpt_x_control + ca_x_control
-        cartesian_y_control = base_y_control + adpt_y_control + ca_y_control
-        cartesian_z_control = base_z_control + adpt_z_control + ca_z_control
+        cartesian_x_control = clamp(base_x_control, -300, 300) #+ adpt_x_control + ca_x_control
+        cartesian_y_control = clamp(base_y_control, -300, 300) #+ adpt_y_control + ca_y_control
+        cartesian_z_control = clamp(base_z_control, -300, 300) #+ adpt_z_control + ca_z_control
 
         self.rpyt_cmd.rcRoll = 1500 + cartesian_x_control*np.cos(self.current_attitude[2]) + cartesian_y_control*np.sin(self.current_attitude[2])
         self.rpyt_cmd.rcPitch = 1500 + cartesian_x_control*np.sin(self.current_attitude[2]) - cartesian_y_control*np.cos(self.current_attitude[2])
         self.rpyt_cmd.rcThrottle = 1500 + cartesian_z_control
 
         ##### ------------ Clamping -------------- ######
-        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1000, 1800)
-        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1000, 1800)
+        self.rpyt_cmd.rcRoll = clamp(self.rpyt_cmd.rcRoll, 1200, 1800) + ca_x_control
+        self.rpyt_cmd.rcPitch = clamp(self.rpyt_cmd.rcPitch, 1200, 1800) + ca_y_control
         self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000)
+
+
+        base_msg = PoseStamped()
+        base_msg.header.stamp = rospy.Time.now()
+        base_msg.pose.position.x = self.rpyt_cmd.rcRoll
+        base_msg.pose.position.y = self.rpyt_cmd.rcPitch
+        base_msg.pose.position.z = self.rpyt_cmd.rcThrottle
+        self.base_pub.publish(base_msg)
+
 
         ###### ----------- Publishing messages --------- ######
         if self.reached_car == False:

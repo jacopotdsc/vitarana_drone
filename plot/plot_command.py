@@ -1,4 +1,4 @@
-# plot_compare_3x2.py
+# plot_compare_3xN.py
 import argparse
 import os
 import pandas as pd
@@ -27,46 +27,42 @@ def load_three_columns(csv_path):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Confronto 3×2: tre variabili (colonne 2..4) per due CSV (si ignora la prima colonna)."
+        description="Confronto 3×N: tre variabili (colonne 2..4) per 2 o 3 CSV (si ignora la prima colonna)."
     )
-    ap.add_argument("file_a", help="Primo CSV (con header; >=4 colonne)")
-    ap.add_argument("file_b", help="Secondo CSV (con header; >=4 colonne)")
+    ap.add_argument("files", nargs="+", help="2 o 3 CSV (con header; >=4 colonne ciascuno)")
     ap.add_argument("--markers", action="store_true", help="Mostra i punti oltre alla linea")
     args = ap.parse_args()
 
-    x_a, data_a, xlab_a, cols_a = load_three_columns(args.file_a)
-    x_b, data_b, xlab_b, cols_b = load_three_columns(args.file_b)
+    if not (2 <= len(args.files) <= 3):
+        raise SystemExit("Devi passare 2 o 3 file CSV.")
 
-    # figura 3x2
-    fig, axes = plt.subplots(3, 2, figsize=(12, 10), sharex='col')
+    # carica tutti i file
+    loaded = []
+    for path in args.files:
+        x, data, xlab, cols = load_three_columns(path)
+        loaded.append((x, data, xlab, cols, os.path.basename(path)))
 
-    # nomi file brevi per i titoli colonna
-    name_a = os.path.basename(args.file_a)
-    name_b = os.path.basename(args.file_b)
+    ncols = len(loaded)
+    nrows = 3
 
-    # Colonna sinistra = file A
-    for i in range(3):
-        y = data_a.iloc[:, i].to_numpy()
-        ax = axes[i, 0]
-        ax.plot(x_a, y, linestyle="-")
-        if args.markers: ax.scatter(x_a, y, s=10)
-        ax.grid(True)
-        ax.set_ylabel(cols_a[i])
-        if i == 0:
-            ax.set_title(name_a)
-    axes[2, 0].set_xlabel(xlab_a)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5*ncols + 2, 10), sharex='col')
+    # se ncols==1, axes non è 2D; forziamo una matrice per semplicità
+    if ncols == 1:
+        axes = np.array([[axes]]*nrows).reshape(nrows, 1)
 
-    # Colonna destra = file B
-    for i in range(3):
-        y = data_b.iloc[:, i].to_numpy()
-        ax = axes[i, 1]
-        ax.plot(x_b, y, linestyle="-")
-        if args.markers: ax.scatter(x_b, y, s=10)
-        ax.grid(True)
-        ax.set_ylabel(cols_b[i])
-        if i == 0:
-            ax.set_title(name_b)
-    axes[2, 1].set_xlabel(xlab_b)
+    # per ogni colonna/file
+    for j, (x, data, xlab, cols, name) in enumerate(loaded):
+        for i in range(nrows):
+            y = data.iloc[:, i].to_numpy()
+            ax = axes[i, j]
+            ax.plot(x, y, linestyle="-")
+            if args.markers:
+                ax.scatter(x, y, s=10)
+            ax.grid(True)
+            ax.set_ylabel(cols[i])
+            if i == 0:
+                ax.set_title(name)
+        axes[nrows-1, j].set_xlabel(xlab)
 
     plt.tight_layout()
     plt.show()
