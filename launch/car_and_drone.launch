@@ -8,7 +8,8 @@
 	<node pkg="vitarana_drone" type="attitude_controller.py" name="attitude_controller" output="screen"/>
 
 	<node pkg="vitarana_drone" type="position_controller.py" name="position_controller" output="screen">
-        <param name="use_adaptive_controller" value="False" /> <!-- "True", "False"-->
+        <param name="use_ff" value="False" /> <!-- "True", "False"-->
+        <param name="use_ca" value="False" /> <!-- "True", "False"-->
     </node>
 
 	<node pkg="vitarana_drone" type="motor_api.py" name="motor_api" output="screen"/>
