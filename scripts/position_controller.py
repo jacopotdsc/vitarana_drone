@@ -214,8 +214,6 @@ class Edrone():
         ff_y_control = self.use_ff*ff_on*( self.Kfy*velocity_y_control + self.car_location[1]) 
         ff_z_control = self.use_ff*ff_on*( 0 )
 
-        print(f"{ff_on}, {self.use_ff} -> {ff_x_control:.2f}, {ff_y_control:.2f}")
-
         ### plotting
         ff_msg = PoseStamped()
         ff_msg.header.stamp = rospy.Time.now()
