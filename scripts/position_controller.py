@@ -80,7 +80,7 @@ class Edrone():
 
         self.ca_pub = rospy.Publisher('/drone_ca_control', PoseStamped, queue_size=1)
         self.base_pub = rospy.Publisher('/drone_base_control', PoseStamped, queue_size=1)
-        self.drone_pose_pub = rospy.Publisher('/drone_pose_pub', PoseStamped, queue_size=1)
+        self.drone_pose_pub = rospy.Publisher('/drone_pose_pub', Odometry, queue_size=1)
 
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.ground_truth_callback)
@@ -150,11 +150,15 @@ class Edrone():
         self.drone_velocity[1] = vel.y
         self.drone_velocity[2] = vel.z
 
-        drone_pose_msg = PoseStamped()
+        ### plotting 
+        drone_pose_msg = Odometry()
         drone_pose_msg.header.stamp = rospy.Time.now()
-        drone_pose_msg.pose.position.x = self.drone_location[0]
-        drone_pose_msg.pose.position.y = self.drone_location[1]
-        drone_pose_msg.pose.position.z = self.drone_location[2]
+        drone_pose_msg.pose.pose.position.x = self.drone_location[0]
+        drone_pose_msg.pose.pose.position.y = self.drone_location[1]
+        drone_pose_msg.pose.pose.position.z = self.drone_location[2]
+        drone_pose_msg.twist.twist.linear.x = self.drone_velocity[0]
+        drone_pose_msg.twist.twist.linear.y = self.drone_velocity[1]
+        drone_pose_msg.twist.twist.linear.z = self.drone_velocity[2]
 
         self.drone_pose_pub.publish(drone_pose_msg)
 
@@ -313,11 +317,12 @@ class Edrone():
         self.rpyt_cmd.rcPitch    =    clamp(self.rpyt_cmd.rcPitch, 1200, 1800) + ff_y_control + ca_y_control 
         self.rpyt_cmd.rcThrottle = clamp(self.rpyt_cmd.rcThrottle, 1000, 2000) + ff_z_control + ca_z_control
 
+        ### plotting
         base_msg = PoseStamped()
         base_msg.header.stamp = rospy.Time.now()
-        base_msg.pose.position.x = self.rpyt_cmd.rcRoll
-        base_msg.pose.position.y = self.rpyt_cmd.rcPitch
-        base_msg.pose.position.z = self.rpyt_cmd.rcThrottle
+        base_msg.pose.position.x = cartesian_x_control
+        base_msg.pose.position.y = cartesian_y_control
+        base_msg.pose.position.z = cartesian_z_control
         self.base_pub.publish(base_msg)
 
         ###### ----------- Publishing messages --------- ######

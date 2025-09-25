@@ -21,8 +21,8 @@ class Plotter:
 
         self.topics = {
             '/my_robot/odom': 'car_odom.csv',
-            '/drone_ca_control': 'ca_control.csv',
-            '/drone_base_control': 'base_control.csv',
+            '/drone_ca_control': 'collision_avoidance_value.csv',
+            '/drone_base_control': 'base_pid_value.csv',
             '/drone_pose_pub': 'drone_pose.csv'
         }
 
@@ -30,7 +30,7 @@ class Plotter:
             '/my_robot/odom': Odometry,
             '/drone_ca_control': PoseStamped,
             '/drone_base_control': PoseStamped,
-            '/drone_pose_pub': PoseStamped
+            '/drone_pose_pub': Odometry
         }
 
         self.files = {}
@@ -67,13 +67,16 @@ class Plotter:
             self.writers[topic].writerow([t, x, y, z])
         elif isinstance(msg, Odometry):
             if self.files[topic].tell() == 0:
-                self.writers[topic].writerow(["t", "x", "y", "z"])
+                self.writers[topic].writerow(["t", "x", "y", "z", "vx", "vy", "vz"])
 
             t = f"{msg.header.stamp.to_sec():.3f}"
             x = round(msg.pose.pose.position.x, 2)
             y = round(msg.pose.pose.position.y, 2)
             z = round(msg.pose.pose.position.z, 2)
-            self.writers[topic].writerow([t, x, y, z])
+            vx = round(msg.pose.pose.position.x, 2)
+            vy = round(msg.pose.pose.position.y, 2)
+            vz = round(msg.pose.pose.position.z, 2)
+            self.writers[topic].writerow([t, x, y, z, vx, vy, vz])
         elif isinstance(msg, Twist):
             x = round(msg.linear.x, 2)
             y = round(msg.linear.y, 2)
