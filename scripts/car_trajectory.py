@@ -38,7 +38,7 @@ class Car:
 
     def publish_circle(self):
         twist = Twist()
-        while not rospy.is_shutdown() and self.stop_node:
+        while not rospy.is_shutdown() and self.stop_node == False:
             twist.linear.x = self.v
             twist.angular.z = self.omega
             self.pub.publish(twist)
