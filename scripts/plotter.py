@@ -20,10 +20,10 @@ class Plotter:
             os.makedirs(self.plot_dir)
 
         self.topics = {
-            '/my_robot/odom': 'car_odom.csv',
-            '/drone_ca_control': 'collision_avoidance_value.csv',
-            '/drone_base_control': 'base_pid_value.csv',
-            '/drone_pose_pub': 'drone_pose.csv'
+            '/my_robot/odom': 'ca_car_odom.csv',
+            '/drone_ca_control': 'ca_collision_avoidance_value.csv',
+            '/drone_base_control': 'ca_base_pid_value.csv',
+            '/drone_pose_pub': 'ca_drone_pose.csv'
         }
 
         self.messages = {
@@ -73,9 +73,9 @@ class Plotter:
             x = round(msg.pose.pose.position.x, 2)
             y = round(msg.pose.pose.position.y, 2)
             z = round(msg.pose.pose.position.z, 2)
-            vx = round(msg.pose.pose.position.x, 2)
-            vy = round(msg.pose.pose.position.y, 2)
-            vz = round(msg.pose.pose.position.z, 2)
+            vx = round(msg.twist.twist.linear.x, 2)
+            vy = round(msg.twist.twist.linear.y, 2)
+            vz = round(msg.twist.twist.linear.z, 2)
             self.writers[topic].writerow([t, x, y, z, vx, vy, vz])
         elif isinstance(msg, Twist):
             x = round(msg.linear.x, 2)
