@@ -36,7 +36,7 @@ class Edrone():
         self.reached_desired_height = False
         self.reached_car = False
 
-        h = 4.0
+        h = 5.5
         self.hovering_location = [0.0, 0.0, h]
      
         ###### ----------- Drone message command ----------- ######
@@ -180,9 +180,10 @@ class Edrone():
         vel_z  = abs(vz) <= 0.10
 
         if dist_x and dist_y and dist_z and vel_x and vel_y and vel_z:
-            self.reached_car = True
-            self.stop_car_pub.publish(Bool(data=True))
-            return True
+            #self.reached_car = True
+            #self.stop_car_pub.publish(Bool(data=True))
+            #return True
+            return False
         else:
             return False
         
