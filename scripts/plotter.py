@@ -74,9 +74,9 @@ class Plotter:
             x = round(msg.pose.pose.position.x, 2)
             y = round(msg.pose.pose.position.y, 2)
             z = round(msg.pose.pose.position.z, 2)
-            vx = round(msg.pose.pose.position.x, 2)
-            vy = round(msg.pose.pose.position.y, 2)
-            vz = round(msg.pose.pose.position.z, 2)
+            vx = round(msg.pose.twist.twist.linear.x, 2)
+            vy = round(msg.pose.twist.twist.linear.y, 2)
+            vz = round(msg.pose.twist.twist.linear.z, 2)
             self.writers[topic].writerow([t, x, y, z, vx, vy, vz])
         elif isinstance(msg, Twist):
             x = round(msg.linear.x, 2)
