@@ -4,6 +4,7 @@ import rospy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool
 import math
+import time
 
 def publish_circle(pub, rate, v, omega):
     twist = Twist()
@@ -80,6 +81,12 @@ def main():
     v = rospy.get_param('~linear_velocity', 0.5)
     omega = rospy.get_param('~angular_velocity', 0.6)
     omega_90 = math.pi / 2 / 2.0  # 90 gradi in 2 secondi (fisso per quadrato)
+
+    wait_before_start = rospy.get_param('~wait_before_start', 0.0) 
+
+    t = time.time()
+    while time.time() -t < wait_before_start:
+        pass
 
     if traj == 'circle':
         publish_circle(pub, rate, v, omega)
