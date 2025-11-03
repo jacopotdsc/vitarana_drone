@@ -9,19 +9,20 @@ A complete control and simulation framework was developed for the autonomous lan
 ## 🚀 Usage
 
 * **Branch: main**
-    To launch the standard landing simulation (without obstacles):
+    To launch the standard landing simulation (without obstacles)
     ```bash
     roslaunch car_and_drone.launch
     ```
 
-* **Branch: collision_avoidance**: to launch the simulation with a static obstacle:
-        ```bash
-        roslaunch obstacle.launch
-        ```
+* **Branch: collision_avoidance**: to launch the simulation with a static obstacle
+    ```bash
+    roslaunch obstacle.launch
+    ```
+
 *  **Branch: obstacle_traj**: to launch the simulation with an obstacle and a predefined trajectory:
-        ```bash
-        roslaunch obstacle_traj.launch
-        ```
+    ```bash
+    roslaunch obstacle_traj.launch
+    ```
 
 ## 📐 Problem Formulation
 
