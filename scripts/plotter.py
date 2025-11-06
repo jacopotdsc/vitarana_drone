@@ -81,6 +81,9 @@ class Plotter:
             vz = round(msg.twist.twist.linear.z, 2)
             self.writers[topic].writerow([t, x, y, z, vx, vy, vz])
         elif isinstance(msg, TwistStamped):
+            if self.files[topic].tell() == 0:
+                self.writers[topic].writerow(["t", "rd", "pd", "yd", "r", "p", "y"])
+
             rd = msg.twist.linear.x
             pd = msg.twist.linear.y
             yd = msg.twist.linear.z
