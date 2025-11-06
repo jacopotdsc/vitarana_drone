@@ -9,7 +9,7 @@
 
 	<node pkg="vitarana_drone" type="position_controller.py" name="position_controller" output="screen">
         <param name="use_ff" value="True" /> <!-- "True", "False"-->
-        <param name="remain_in_hovering" value="True" /> <!-- "True", "False"-->
+        <param name="remain_in_hovering" value="False" /> <!-- "True", "False"-->
     </node>
 
 	<node pkg="vitarana_drone" type="motor_api.py" name="motor_api" output="screen"/>

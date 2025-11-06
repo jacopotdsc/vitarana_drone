@@ -3,6 +3,7 @@
 from vitarana_drone.msg import *
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32
+from geometry_msgs.msg import TwistStamped
 import rospy
 import time
 import tf
@@ -38,6 +39,7 @@ class AttitudeController():
         self.roll_error = rospy.Publisher('/roll_error', Float32, queue_size=1)     # For plotting purporses
         self.pitch_error = rospy.Publisher('/pitch_error', Float32, queue_size=1)   # For plotting purporses
         self.yaw_error = rospy.Publisher('/yaw_error', Float32, queue_size=1)       # For plotting purporses
+        self.attitude_error_pub = rospy.Publisher('/drone_attitude_error', TwistStamped, queue_size=1)
 
         rospy.Subscriber('/drone_command', edrone_cmd, self.drone_command_callback) # Take data from position controller
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)    # Take data about attitude state of the drone
@@ -104,6 +106,16 @@ class AttitudeController():
         self.roll_error.publish(self.roll_Error)
         self.pitch_error.publish(self.pitch_Error)
         self.yaw_error.publish(self.yaw_Error)
+        
+        att_msg = TwistStamped()
+        att_msg.header.stamp = rospy.Time.now()
+        att_msg.twist.linear.x = self.desired_attitude[0]
+        att_msg.twist.linear.x = self.desired_attitude[1]
+        att_msg.twist.linear.x = self.desired_attitude[2]
+        att_msg.twist.angular.x = self.current_attitude[0]
+        att_msg.twist.angular.y = self.current_attitude[1]
+        att_msg.twist.angular.z = self.current_attitude[2]
+        self.attitude_error_pub.publish(att_msg)
 
 
 if __name__ == '__main__':

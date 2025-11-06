@@ -4,7 +4,7 @@ import rospy
 import rospkg
 import os
 import csv
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Odometry
 
 class Plotter:
@@ -23,14 +23,16 @@ class Plotter:
             '/my_robot/odom': 'main_car_odom.csv',
             '/drone_ff_control': 'main_ff_value.csv',
             '/drone_base_control': 'main_base_pid_value.csv',
-            '/drone_pose_pub': 'main_drone_pose.csv'
+            '/drone_pose_pub': 'main_drone_pose.csv',
+            '/drone_attitude_error' : 'main_drone_attitude_error.csv' 
         }
 
         self.messages = {
             '/my_robot/odom': Odometry,
             '/drone_ff_control': PoseStamped,
             '/drone_base_control': PoseStamped,
-            '/drone_pose_pub': Odometry
+            '/drone_pose_pub': Odometry,
+            '/drone_attitude_error' : TwistStamped
         }
 
         self.files = {}
@@ -78,11 +80,14 @@ class Plotter:
             vy = round(msg.twist.twist.linear.y, 2)
             vz = round(msg.twist.twist.linear.z, 2)
             self.writers[topic].writerow([t, x, y, z, vx, vy, vz])
-        elif isinstance(msg, Twist):
-            x = round(msg.linear.x, 2)
-            y = round(msg.linear.y, 2)
-            z = round(msg.linear.z, 2)
-            self.writers[topic].writerow([t, x, y, z])
+        elif isinstance(msg, TwistStamped):
+            rd = msg.twist.linear.x
+            pd = msg.twist.linear.y
+            yd = msg.twist.linear.z
+            r = round(msg.twist.angular.x, 2)
+            p = round(msg.twist.angular.y, 2)
+            y = round(msg.twist.angular.z, 2)
+            self.writers[topic].writerow([t, rd, pd, yd, r, p, y])
         else:
             rospy.logwarn(f"[PLOTTER] No message type define for {topic}: editat generic_callback in plotter.py")
             return
