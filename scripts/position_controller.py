@@ -51,8 +51,8 @@ class Edrone():
         self.Kp = [10, 10, 20]
         self.Ki = [0, 0, 0]
         self.Kd = [400, 400, 2000]
-        self.Kfx = 1 # 1, 10, 20, 50 
-        self.Kfy = 1 # 1, 10, 20, 50
+        self.Kfx = 10 # 1, 10, 20, 50 
+        self.Kfy = 10 # 1, 10, 20, 50
        
         self.derivate_error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
